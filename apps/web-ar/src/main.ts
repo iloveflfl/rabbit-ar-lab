@@ -3,7 +3,7 @@ import './styles.css';
 import type { HighlightId, TopicId } from '@rabbit/shared';
 import { sceneScripts, scenes } from '@rabbit/content';
 import { DeviceOrientationSource } from './ar/sensors';
-import { CameraError, type TrackState, preferredArMode, rememberArMode, rememberXr, xrKnownBad, xrSupported } from './ar/support';
+import { CameraError, type TrackState, forgetArMode, rememberXr, xrKnownBad, xrSupported } from './ar/support';
 import type { ArView } from './ar/tracker';
 import { ViewerView } from './ar/viewer';
 import { ChatController } from './chat/chatController';
@@ -267,21 +267,27 @@ async function startAr(kind: ArKind): Promise<void> {
 
   // 1순위: WebXR(ARCore) 세계 추적. 지원하지 않거나 시작에 실패하면 카메라 영상 경로로 내려간다.
   //   ?xr=0 이면 건너뛰고, ?xr=1 이면 예전에 실패했던 기기에서도 다시 시도한다.
-  //   화면의 전환 버튼으로 고른 방식(rabbit.arMode)이 있으면 그것을 따른다.
-  const pref = preferredArMode();
-  const wantXr = kind === 'device' && params.get('xr') !== '0' && (params.get('xr') === '1' || (pref !== 'video' && !xrKnownBad()));
+  //   공간 고정이 항상 기본이다. 카메라 영상 방식(60fps)은 실제 폰에서 떨림이 심해서
+  //   ?debug=1 일 때만 실험용 버튼으로 남겨 두고, 고른 것을 기억하지도 않는다.
+  forgetArMode();
+  const wantXr = kind === 'device' && params.get('xr') !== '0' && (params.get('xr') === '1' || !xrKnownBad());
   if (wantXr && (await xrSupported())) {
     const [, { XrArView }] = await loadAr();
-    const ui = buildExperience('ar', false, {
-      label: '60fps',
-      title: '부드럽게 보기로 전환 (카메라 영상 + 자이로, 최대 60fps)',
-      onClick: () => {
-        rememberArMode('video');
-        session?.stop();
-        session = null;
-        void startVideoAr(kind, motion);
-      },
-    });
+    const ui = buildExperience(
+      'ar',
+      false,
+      params.get('debug')
+        ? {
+            label: '60fps',
+            title: '실험: 카메라 영상 + 자이로 방식으로 전환 (최대 60fps, 떨림 큼)',
+            onClick: () => {
+              session?.stop();
+              session = null;
+              void startVideoAr(kind, motion);
+            },
+          }
+        : undefined,
+    );
     ui.root.classList.add('xr');
     const xr = new XrArView(ui.stage, {
       onState: (s) => ui.setStatus(s),
@@ -330,7 +336,6 @@ async function startVideoAr(kind: ArKind, motion: Promise<boolean>): Promise<voi
           label: '고정',
           title: '공간 고정 보기로 전환 (ARCore, 더 안정적이지만 보통 30fps)',
           onClick: () => {
-            rememberArMode('xr');
             rememberXr('ok');
             void startAr('device');
           },
