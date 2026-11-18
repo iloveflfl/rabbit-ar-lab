@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "purpose": "UI scripted scenes; all actual research numbers must originate in poster_facts.json",
+  "scenes": [
+    {
+      "id": "intro",
+      "title_ko": "🐰 토끼의 극저온 식각 교실",
+      "fact_ids": [],
+      "rabbit_clip": "rabbit_wave",
+      "scene_action": "rabbit_greet",
+      "beginner_prompt": "플라즈마로 반도체 표면을 깎을 때 왜 온도가 중요할까요?"
+    },
+    {
+      "id": "plasma_basics",
+      "title_ko": "플라즈마가 뭐야?",
+      "fact_ids": [
+        "sic_continuous_minus50"
+      ],
+      "rabbit_clip": "rabbit_point",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "플라즈마는 재료 표면에 입자와 에너지를 전달해요."
+    },
+    {
+      "id": "continuous_heat",
+      "title_ko": "냉각기보다 뜨거워진 기판",
+      "fact_ids": [
+        "sic_continuous_minus50"
+      ],
+      "rabbit_clip": "rabbit_surprised",
+      "scene_action": "show_heating",
+      "beginner_prompt": "냉각기 설정이 −50°C인데 실제 시료는 120초 뒤 73°C가 되었어요."
+    },
+    {
+      "id": "cyclic_cooling",
+      "title_ko": "30초 깎고, 3분 쉬기",
+      "fact_ids": [
+        "sic_cyclic_minus50"
+      ],
+      "rabbit_clip": "rabbit_cooling",
+      "scene_action": "show_cooling",
+      "beginner_prompt": "30초 플라즈마 후 냉각을 반복했더니 온도가 오르고 내렸어요."
+    },
+    {
+      "id": "etch_rates",
+      "title_ko": "SiC는 얼마나 빨리 깎일까?",
+      "fact_ids": [
+        "sic_etch_rate_setpoints"
+      ],
+      "rabbit_clip": "rabbit_point",
+      "scene_action": "show_etch_rate",
+      "beginner_prompt": "각 실험 조건에서 분당 깎인 두께가 달랐어요."
+    },
+    {
+      "id": "supports",
+      "title_ko": "받침대도 중요해요",
+      "fact_ids": [
+        "sic_mounting_comparison"
+      ],
+      "rabbit_clip": "rabbit_think",
+      "scene_action": "show_mounting",
+      "beginner_prompt": "시편을 받치는 방식마다 측정된 온도가 달랐어요."
+    },
+    {
+      "id": "cu_profiles",
+      "title_ko": "구리 시편의 표면 단차",
+      "fact_ids": [
+        "cu_profile_postprocessing"
+      ],
+      "rabbit_clip": "rabbit_point",
+      "scene_action": "show_cu_profile",
+      "beginner_prompt": "PR 제거 후와 묽은 HCl 처리 후의 표면 단차를 비교했어요."
+    },
+    {
+      "id": "mo_reference",
+      "title_ko": "Mo 참고 식각 실험",
+      "fact_ids": [
+        "mo_reference_etch"
+      ],
+      "rabbit_clip": "rabbit_explain",
+      "scene_action": "show_mo",
+      "beginner_prompt": "Mo 참고 시편에서 약 95 nm/min의 식각률이 기록됐어요."
+    },
+    {
+      "id": "conclusion",
+      "title_ko": "오늘 배운 세 가지",
+      "fact_ids": [
+        "sic_continuous_minus50",
+        "sic_cyclic_minus50",
+        "sic_etch_rate_setpoints"
+      ],
+      "rabbit_clip": "rabbit_cheer",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "식각하면서 열이 나고, 냉각하면 온도가 내려가며, 조건마다 결과가 달라질 수 있어요."
+    }
+  ],
+  "allowed_rabbit_clips": [
+    "rabbit_idle",
+    "rabbit_talk",
+    "rabbit_point",
+    "rabbit_surprised",
+    "rabbit_cooling",
+    "rabbit_cheer",
+    "rabbit_think",
+    "rabbit_wave"
+  ],
+  "notes": "Individual clip assets not yet created; generate one approved 2D character sheet then rig/export."
+}

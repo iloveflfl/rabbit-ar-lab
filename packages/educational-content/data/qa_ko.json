@@ -1,0 +1,219 @@
+{
+  "schema_version": "1.0",
+  "purpose": "서버가 꺼져 있어도 볼 수 있는 사전제작 답변 + Android 단말의 짧은 질문 캐시. 수치는 poster_facts.json 만 사용한다.",
+  "matching": "질문에서 공백·문장부호를 지우고 소문자로 만든 뒤 keywords 부분문자열을 찾는다. 점수 = 맞은 키워드 글자 수의 합. must 가 있으면 그중 하나는 반드시 포함해야 하고, not 중 하나라도 있으면 그 항목은 건너뛴다.",
+  "min_score": 2,
+  "strong_score": 5,
+  "fallback": {
+    "reply": "그건 이 포스터에 실린 측정 자료만으로는 답하기 어려워. 대신 '왜 −50도인데 기판은 73도야?', 'SiC 식각은 뭐야?', '냉각을 왜 3분씩 했어?' 같은 걸 물어봐 줘!",
+    "animation": "rabbit_explain",
+    "highlight": null,
+    "sourceFactIds": []
+  },
+  "entries": [
+    {
+      "id": "why_minus50_but_73",
+      "topic": "cryogenic_vs_sample_temp",
+      "keywords": ["73", "-50", "영하50", "50도", "왜뜨거", "뜨거워", "설정온도", "실제온도", "칠러", "냉각기", "chiller"],
+      "must": ["73", "-50", "영하50", "50도", "뜨거", "설정", "칠러", "냉각기", "chiller"],
+      "reply": "−50°C는 냉각기(칠러)에 '맞춰 둔 값'이지, 기판 온도가 아니야. 플라즈마가 계속 열을 넣으면 기판은 그보다 훨씬 뜨거워져. 이 실험에선 120초 뒤 SiC 시편이 2.3°C에서 73°C까지, 홀더는 98°C까지 올라간 걸 실제로 쟀어!",
+      "animation": "show_heating",
+      "highlight": "results_thermal_continuous",
+      "sourceFactIds": ["sic_continuous_minus50"]
+    },
+    {
+      "id": "what_is_sic_etching",
+      "topic": "plasma_etching_basics",
+      "keywords": ["sic식각", "sic", "식각", "에칭", "etch", "깎", "탄화규소", "실리콘카바이드", "뭐야", "뭔가요", "무엇"],
+      "must": ["식각", "에칭", "etch", "sic", "탄화규소", "실리콘카바이드"],
+      "reply": "식각은 재료 표면을 아주 얇게 깎아 내는 공정이야. SiC(탄화규소)는 단단하고 열에 강한 반도체 재료인데, 여기선 HCl 가스로 만든 플라즈마로 깎았어. 전기를 띤 알갱이가 표면을 두드리고 화학 반응도 일어나면서 조금씩 깎여 나가는 거야.",
+      "animation": "rabbit_explain",
+      "highlight": "methods",
+      "sourceFactIds": ["sic_continuous_minus50"]
+    },
+    {
+      "id": "why_cool_3min",
+      "topic": "cyclic_cooling",
+      "keywords": ["3분", "삼분", "30초", "쉬", "냉각을왜", "반복", "끊어", "펄스", "cyclic", "pulse", "식히", "나눠"],
+      "must": ["3분", "삼분", "30초", "쉬", "반복", "끊어", "펄스", "cyclic", "pulse", "나눠"],
+      "reply": "한 번에 오래 켜면 계속 뜨거워지니까, 30초만 깎고 3분 쉬면서 식혀 본 거야. 온도는 11 → 27 → 14.5 → 30 → 16 → 32°C로 움직였어. 30초마다 약 16°C 오르고, 쉬는 3분 동안 12.5~14°C 내려갔지!",
+      "animation": "show_cooling",
+      "highlight": "results_thermal_cyclic",
+      "sourceFactIds": ["sic_cyclic_minus50"]
+    },
+    {
+      "id": "does_30s_stay_cool",
+      "topic": "cyclic_cooling",
+      "keywords": ["30초만", "안뜨거", "짧게", "조금만", "덜뜨거"],
+      "reply": "안 뜨거워지는 건 아니야! 첫 30초 동안에도 11°C에서 27°C로 올랐어. 그 뒤 3분 식히니까 14.5°C로 내려갔지. 짧게 깎고 쉬면 120초 연속(73°C)보다 훨씬 낮게 유지된 걸 볼 수 있어.",
+      "animation": "show_cooling",
+      "highlight": "results_thermal_cyclic",
+      "sourceFactIds": ["sic_cyclic_minus50", "sic_continuous_minus50"]
+    },
+    {
+      "id": "why_minus40_lowest",
+      "topic": "sic_etch_rate",
+      "keywords": ["-40", "영하40", "40도", "75", "201", "185", "식각률", "식각속도", "깎는속도", "덜깎", "안깎", "비단조", "순서", "빨리깎", "속도", "sic식각률", "sic식각속도", "얼마", "몇nm"],
+      "not": ["구리", "cu", "copper", "mo", "몰리브덴", "유리", "glass"],
+      "must": ["-40", "영하40", "40도", "75", "201", "185", "식각률", "식각속도", "속도", "덜깎", "안깎", "비단조"],
+      "reply": "칠러 −50 / −40 / −20°C에서 SiC 식각률은 201 / 75 / 185 nm/min이었어. −40°C에서 가장 낮았지. 그런데 그때 전압(self-bias)도 116 / 103 / 115 V로 같이 달랐어. 그래서 원인을 온도 하나로 딱 정할 수는 없어.",
+      "animation": "show_etch_rate",
+      "highlight": "results_etch_rate",
+      "sourceFactIds": ["sic_etch_rate_setpoints"]
+    },
+    {
+      "id": "what_is_self_bias",
+      "topic": "sic_etch_rate",
+      "keywords": ["selfbias", "셀프바이어스", "바이어스", "전압", "bias", "볼트"],
+      "reply": "self-bias는 플라즈마를 켰을 때 기판 쪽에 저절로 걸리는 전압이야. 이 전압이 클수록 알갱이(이온)가 기판을 더 세게 두드려. 이 실험에선 세 조건에서 116 / 103 / 115 V로 달랐기 때문에, 식각률 차이를 온도만으로 설명하면 안 돼.",
+      "animation": "show_etch_rate",
+      "highlight": "results_etch_rate",
+      "sourceFactIds": ["sic_etch_rate_setpoints"]
+    },
+    {
+      "id": "what_is_plasma",
+      "topic": "plasma_etching_basics",
+      "keywords": ["플라즈마", "plasma", "플라스마", "이온", "rf"],
+      "must": ["플라즈마", "plasma", "플라스마", "이온", "rf"],
+      "reply": "플라즈마는 기체에 전기 에너지(RF)를 줘서 원자가 전기를 띤 알갱이로 쪼개진 상태야. 번개나 네온사인 속 빛나는 기체와 같은 종류지. 이 알갱이들이 기판 표면에 에너지를 전해 주면서 재료를 깎고, 동시에 열도 전달해.",
+      "animation": "rabbit_explain",
+      "highlight": "methods",
+      "sourceFactIds": ["sic_continuous_minus50"]
+    },
+    {
+      "id": "what_is_helium_cooling",
+      "topic": "helium_backside_cooling",
+      "keywords": ["헬륨", "he", "helium", "뒷면", "backside", "뒤에서", "어떻게식혀", "어떻게냉각", "냉각방법"],
+      "must": ["헬륨", "helium", "뒷면", "backside", "뒤에서", "어떻게식혀", "어떻게냉각", "냉각방법"],
+      "reply": "진공 속에서는 열을 옮겨 줄 공기가 없어서, 기판과 차가운 받침대 사이에 헬륨(He) 기체를 넣어 줘. 헬륨이 기판의 열을 받침대로 날라 주는 배달부 역할을 해. 이 실험에선 헬륨 압력을 20 Torr로 줬어.",
+      "animation": "rabbit_explain",
+      "highlight": "methods",
+      "sourceFactIds": ["sic_continuous_minus50"]
+    },
+    {
+      "id": "holder_vs_sample",
+      "topic": "continuous_heating",
+      "keywords": ["홀더", "holder", "98", "시편", "차이", "25도"],
+      "must": ["홀더", "holder", "98"],
+      "reply": "120초 뒤에 SiC 시편은 73°C, 시편을 잡고 있는 홀더는 98°C였어. 둘 사이가 25°C나 벌어졌지. 같은 장비 안에서도 어디를 재느냐에 따라 온도가 다르다는 뜻이야.",
+      "animation": "show_heating",
+      "highlight": "results_thermal_continuous",
+      "sourceFactIds": ["sic_continuous_minus50"]
+    },
+    {
+      "id": "mounting",
+      "topic": "mounting_comparison",
+      "keywords": ["받침", "지지", "마운트", "mount", "그리스", "grease", "웨이퍼", "wafer", "알루미늄", "al판", "8인치"],
+      "must": ["받침", "지지", "마운트", "mount", "그리스", "grease", "웨이퍼", "wafer", "알루미늄", "al판", "8인치"],
+      "reply": "시편 받침을 바꿔서 120초 뒤 온도를 비교했어. 작은 홀더 73°C, 8인치 Si 웨이퍼 92°C, 8인치 Al 판은 그리스 없이 78°C, 진공 그리스를 바르면 76°C였어. 그런데 전압도 116 / 125 / 140 / 140 V로 달라서, 2°C 차이를 그리스 덕분이라고 단정할 수는 없어.",
+      "animation": "show_mounting",
+      "highlight": "results_mounting",
+      "sourceFactIds": ["sic_mounting_comparison"]
+    },
+    {
+      "id": "cu_profile",
+      "topic": "cu_step_height",
+      "keywords": ["구리", "cu", "copper", "단차", "프로파일", "profil", "alphastep", "알파스텝", "옹스트롬", "염산", "pr", "감광"],
+      "must": ["구리", "cu", "copper", "단차", "프로파일", "profil", "알파스텝", "alphastep", "염산", "감광"],
+      "reply": "구리 무늬 시편은 감광막(PR)을 벗긴 뒤와 묽은 염산(DI 200 mL : HCl 3 mL) 처리 뒤에 표면 단차를 쟀어. No.2는 10,999 → 3,662 Å, No.3는 14,442 → 11,822 Å, No.4는 11,090 → 10,808 Å. 이건 '표면 높이 차이'라서, 구리가 그만큼 깎였다는 뜻은 아니야!",
+      "animation": "show_cu_profile",
+      "highlight": "results_cu_profile",
+      "sourceFactIds": ["cu_profile_postprocessing"]
+    },
+    {
+      "id": "cu_etch_rate_trap",
+      "topic": "cu_step_height",
+      "keywords": ["구리식각률", "cu식각률", "구리는얼마나", "구리속도", "구리식각속도", "구리깎"],
+      "reply": "좋은 질문인데, 이 포스터에는 구리의 식각률이 없어. 잰 것은 처리 전후의 '표면 단차'(예: No.2 10,999 → 3,662 Å)뿐이야. 단차가 변한 이유가 구리가 깎여서인지는 이 자료만으로 알 수 없으니, 식각률로 바꿔 말하면 안 돼.",
+      "animation": "show_cu_profile",
+      "highlight": "results_cu_profile",
+      "sourceFactIds": ["cu_profile_postprocessing"]
+    },
+    {
+      "id": "mo_reference",
+      "topic": "mo_reference",
+      "keywords": ["mo", "몰리브덴", "몰리", "95", "ecr", "적층", "stack", "mo식각", "mo식각률", "몰리브덴식각"],
+      "must": ["mo", "몰리브덴", "몰리", "95", "ecr", "적층", "stack"],
+      "reply": "몰리브덴(Mo) 참고 실험이야. 두께 200 nm Mo를 칠러 −50°C, ECR/RIE 2800/550 W, self-bias 140 V에서 10초씩 6번(합쳐서 60초) 노출했더니 약 95 nm/min으로 깎였어. 포스터의 Mo/Cu/Mo 그림은 개념도일 뿐이야.",
+      "animation": "show_mo",
+      "highlight": "results_mo",
+      "sourceFactIds": ["mo_reference_etch"]
+    },
+    {
+      "id": "si_glass_prior",
+      "topic": "research_overview",
+      "keywords": ["유리", "glass", "글라스", "1학기", "지난학기", "930", "155", "실리콘은"],
+      "must": ["유리", "glass", "글라스", "1학기", "지난학기", "930", "155"],
+      "reply": "그건 지난 학기에 따로 한 실험이야. 같은 2분 식각에서 Si는 930.65, 유리는 155.82 nm/min으로 Si가 약 5.97배 빨리 깎였어. 지금의 SiC·Cu 실험과는 다른 실험이니까 섞어서 비교하면 안 돼.",
+      "animation": "rabbit_explain",
+      "highlight": "motivation",
+      "sourceFactIds": ["semester1_si_glass_benchmark"]
+    },
+    {
+      "id": "why_cryogenic",
+      "topic": "research_overview",
+      "keywords": ["극저온", "cryo", "왜차갑", "왜식혀", "왜냉각", "온도가왜중요", "왜중요", "차갑게"],
+      "reply": "식각은 표면에서 일어나는 화학 반응이라 온도에 따라 결과가 달라질 수 있어. 그래서 기판을 차갑게 조절하려는 건데, 플라즈마가 열을 계속 넣기 때문에 '칠러 설정'만 믿으면 안 돼. 이 연구는 실제 온도를 직접 재서 그 차이를 보여 준 거야.",
+      "animation": "rabbit_explain",
+      "highlight": "motivation",
+      "sourceFactIds": ["sic_continuous_minus50"]
+    },
+    {
+      "id": "overview",
+      "topic": "research_overview",
+      "keywords": ["무슨연구", "어떤연구", "요약", "한줄", "뭘한", "뭐한", "소개", "주제", "결론", "정리"],
+      "reply": "한 줄 요약! 극저온 식각 장비에서 SiC를 깎을 때 실제 온도가 어떻게 변하는지 재고, 온도 설정에 따라 식각 속도가 어떻게 달랐는지 본 연구야. 120초 연속이면 73°C까지 올랐고, 30초씩 끊으면 27~32°C에 머물렀어.",
+      "animation": "rabbit_explain",
+      "highlight": "conclusions",
+      "sourceFactIds": ["sic_continuous_minus50", "sic_cyclic_minus50", "sic_etch_rate_setpoints"]
+    },
+    {
+      "id": "units_nm",
+      "topic": "general",
+      "keywords": ["nm", "나노", "나노미터", "단위", "옹스트롬", "å", "얼마나작"],
+      "must": ["nm", "나노", "단위", "옹스트롬", "å"],
+      "reply": "nm(나노미터)는 10억 분의 1 미터야. 머리카락 굵기의 약 10만 분의 1 정도! Å(옹스트롬)은 그보다 10배 더 작아서 10 Å = 1 nm야. 그러니까 201 nm/min은 1분에 머리카락 굵기의 수백 분의 1만큼 깎는다는 뜻이야.",
+      "animation": "rabbit_explain",
+      "highlight": null,
+      "sourceFactIds": []
+    },
+    {
+      "id": "conditions",
+      "topic": "plasma_etching_basics",
+      "keywords": ["조건", "파워", "power", "압력", "sccm", "icp", "rie", "mtorr", "hcl", "가스", "장비"],
+      "must": ["조건", "파워", "power", "압력", "sccm", "icp", "rie", "mtorr", "hcl", "가스", "장비"],
+      "reply": "SiC 실험 조건은 ICP/RIE 파워 1000/800 W, HCl 가스 50 sccm, 압력 2 mTorr, 뒷면 헬륨 20 Torr야. ICP는 플라즈마를 만드는 힘, RIE는 알갱이를 기판 쪽으로 끌어당기는 힘이라고 생각하면 돼.",
+      "animation": "rabbit_explain",
+      "highlight": "methods",
+      "sourceFactIds": ["sic_continuous_minus50"]
+    },
+    {
+      "id": "greeting",
+      "topic": "general",
+      "keywords": ["안녕", "하이", "hello", "hi", "반가", "누구", "이름", "토끼"],
+      "reply": "안녕! 나는 이 포스터를 쉽게 설명해 주는 토끼 선생님이야. 플라즈마로 SiC를 깎을 때 온도가 어떻게 변하는지 궁금한 걸 뭐든 물어봐!",
+      "animation": "rabbit_greet",
+      "highlight": null,
+      "sourceFactIds": []
+    },
+    {
+      "id": "who_made",
+      "topic": "general",
+      "keywords": ["누가만들", "저자", "연구자", "연구실", "어느학교", "어디서"],
+      "reply": "이 포스터는 고려대학교 세종캠퍼스 디스플레이·반도체물리학부 Plasma & Device Laboratory의 Gyusung Lee, Suseong Lee, Munpyo Hong 님이 만든 연구야.",
+      "animation": "rabbit_greet",
+      "highlight": null,
+      "sourceFactIds": []
+    },
+    {
+      "id": "is_ai_local",
+      "topic": "general",
+      "keywords": ["ai", "인공지능", "챗gpt", "gpt", "어떻게대답", "서버", "llm"],
+      "must": ["ai", "인공지능", "gpt", "어떻게대답", "서버", "llm"],
+      "reply": "지금 이 답변은 전시자의 스마트폰 안에서 도는 작은 AI가 만들거나, 폰이 꺼져 있으면 미리 준비해 둔 답변이 나와. 말풍선 아래 작은 표시로 어느 쪽인지 알 수 있어!",
+      "animation": "rabbit_explain",
+      "highlight": null,
+      "sourceFactIds": []
+    }
+  ]
+}

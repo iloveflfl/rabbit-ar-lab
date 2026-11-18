@@ -1,0 +1,61 @@
+{
+  "note": "클립은 스프라이트 프레임이 아니라 리그 부위의 절차적 보간이다. 구현: apps/web-ar/src/rabbit/clips.ts",
+  "pivot": {
+    "description": "두 발 사이 바닥",
+    "design_xy": [
+      260,
+      570
+    ]
+  },
+  "blend_seconds": 0.24,
+  "clips": [
+    {
+      "id": "rabbit_idle",
+      "duration_s": 3,
+      "loop": true,
+      "description": "숨쉬기, 귀 살랑임, 눈 깜박임"
+    },
+    {
+      "id": "rabbit_talk",
+      "duration_s": 2.4,
+      "loop": true,
+      "description": "입 모양 변화와 작은 손짓"
+    },
+    {
+      "id": "rabbit_point",
+      "duration_s": 3,
+      "loop": true,
+      "description": "포인터로 그래프나 모형을 가리킨다"
+    },
+    {
+      "id": "rabbit_surprised",
+      "duration_s": 1.5,
+      "loop": false,
+      "description": "눈이 커지고 두 귀가 번쩍 들린다"
+    },
+    {
+      "id": "rabbit_cooling",
+      "duration_s": 2.6,
+      "loop": false,
+      "description": "냉각 버튼을 꾹 누르고 시원해한다"
+    },
+    {
+      "id": "rabbit_cheer",
+      "duration_s": 1.9,
+      "loop": false,
+      "description": "두 팔을 들고 폴짝폴짝 뛴다"
+    },
+    {
+      "id": "rabbit_think",
+      "duration_s": 3.2,
+      "loop": true,
+      "description": "고개를 갸웃하고 앞발을 볼에 댄다"
+    },
+    {
+      "id": "rabbit_wave",
+      "duration_s": 2.3,
+      "loop": false,
+      "description": "손을 흔들며 인사한다"
+    }
+  ]
+}

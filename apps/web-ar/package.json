@@ -1,0 +1,21 @@
+{
+  "name": "@rabbit/web-ar",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host"
+  },
+  "dependencies": {
+    "@fontsource/jua": "^5.1.0",
+    "@rabbit/content": "*",
+    "@rabbit/shared": "*",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "vite": "^6.0.0"
+  }
+}

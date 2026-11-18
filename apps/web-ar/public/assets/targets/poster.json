@@ -1,0 +1,49 @@
+{
+  "compiledAt": "2026-11-18T06:58:41.690Z",
+  "source": "reference/poster_print_master_2526x3576.png",
+  "targets": [
+    {
+      "id": "full",
+      "crop": {
+        "u0": 0,
+        "v0": 0,
+        "u1": 1,
+        "v1": 1
+      },
+      "compileWidth": 1011,
+      "pixels": [
+        1011,
+        1431
+      ]
+    },
+    {
+      "id": "upper",
+      "crop": {
+        "u0": 0,
+        "v0": 0,
+        "u1": 1,
+        "v1": 0.545
+      },
+      "compileWidth": 1263,
+      "pixels": [
+        1263,
+        974
+      ]
+    },
+    {
+      "id": "lower",
+      "crop": {
+        "u0": 0,
+        "v0": 0.535,
+        "u1": 1,
+        "v1": 0.925
+      },
+      "compileWidth": 1263,
+      "pixels": [
+        1263,
+        697
+      ]
+    }
+  ],
+  "bytes": 2118643
+}

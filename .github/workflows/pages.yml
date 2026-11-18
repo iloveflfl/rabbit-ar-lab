@@ -1,0 +1,49 @@
+name: Deploy WebAR to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run validate:facts
+      - name: Build
+        run: npm run build
+        env:
+          # 저장소 Settings → Variables 에 넣는다. 비밀이 아닌 공개 주소다. 비어 있으면 채팅은 사전제작 답변만 쓴다.
+          VITE_RELAY_URL: ${{ vars.VITE_RELAY_URL }}
+      - name: Fail if the image target is missing
+        run: test -s apps/web-ar/dist/assets/targets/poster.mind
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web-ar/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

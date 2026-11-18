@@ -1,0 +1,16 @@
+{
+  "name": "@rabbit/relay-worker",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "deploy": "wrangler deploy",
+    "token": "node -e \"console.log(require('node:crypto').randomBytes(32).toString('base64url'))\""
+  },
+  "dependencies": { "@rabbit/shared": "*" },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250101.0",
+    "wrangler": "^4.0.0"
+  }
+}

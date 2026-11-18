@@ -1,0 +1,19 @@
+{
+  // Rabbit AR relay. 배포하면 https://rabbit-ar-relay.<계정 서브도메인>.workers.dev 로 고정된다.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rabbit-ar-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-10-01",
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [{ "name": "RELAY", "class_name": "RelayRoom" }]
+  },
+  // Workers Free 요금제에서 쓸 수 있는 SQLite 기반 Durable Object.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RelayRoom"] }],
+  "vars": {
+    // 배포 전 GitHub Pages 주소로 바꾼다. 예: "https://<사용자>.github.io"
+    // 비워 두면 모든 Origin 을 허용한다(로컬 개발용).
+    "ALLOWED_ORIGINS": ""
+  }
+  // DEVICE_TOKEN 은 여기에 쓰지 않는다:  npx wrangler secret put DEVICE_TOKEN
+}

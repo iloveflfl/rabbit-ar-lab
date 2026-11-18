@@ -1,0 +1,107 @@
+{
+  "status": "approved_by_owner",
+  "approved_design": true,
+  "approved_on": "2026-11-18",
+  "note": "소유자가 2026-11-18 에 이 디자인을 확정했다. 이 값은 리그 원본에서 자동으로 뽑는다. 이후 외형 변경은 rig.ts 한 곳에서만 하고, 바꾸면 다시 승인받는다.",
+  "source_of_truth": "apps/web-ar/src/rabbit/rig.ts",
+  "medium": "2D vector parts + 2D skeletal rig (no 3D mesh)",
+  "species": "anthropomorphic rabbit (kemono chibi)",
+  "design_view": {
+    "w": 520,
+    "h": 600,
+    "ox": 260,
+    "oy": 570
+  },
+  "palette": {
+    "outline": "#6A4636",
+    "fur": "#FFEED4",
+    "furLight": "#FFFAF1",
+    "earInner": "#FFB9B4",
+    "blush": "#FF9E9E",
+    "nose": "#F28A8F",
+    "eye": "#3B2346",
+    "iris": "#C2477A",
+    "mouth": "#B0465B",
+    "coat": "#FFFFFF",
+    "coatTrim": "#63C7F2",
+    "tie": "#FFD44A",
+    "pointer": "#8A5A3C",
+    "star": "#FFD44A"
+  },
+  "line": {
+    "color": "#6A4636",
+    "width_main": 5,
+    "join": "round",
+    "cap": "round"
+  },
+  "proportions_design_units": {
+    "total_height_feet_to_ear_tip": 470,
+    "head_width": 236,
+    "head_height": 196,
+    "head_to_body_ratio": "약 2등신",
+    "eye_center_spacing": 104,
+    "eye_size": [
+      28,
+      40
+    ],
+    "ear_length": 173,
+    "ear_base_spacing": 96,
+    "ear_rest_angle_deg": {
+      "left": -11,
+      "right": 15
+    },
+    "body_height": 120,
+    "arm_length_shoulder_to_paw": 79,
+    "tail_radius": 22
+  },
+  "fixed_features": [
+    "긴 귀 2개(안쪽 분홍)",
+    "주둥이와 ω 입, 앞니",
+    "볼 털·이마 털",
+    "분홍 볼터치",
+    "짧고 둥근 꼬리",
+    "앞발 2·발 2 (발가락 선 2개)",
+    "흰 실험 가운 + 하늘색 밑단·소매",
+    "노란 나비넥타이",
+    "주머니의 눈꽃 심벌"
+  ],
+  "parts": [
+    "root",
+    "tail",
+    "footL",
+    "footR",
+    "body",
+    "head",
+    "earL",
+    "earR",
+    "browL",
+    "browR",
+    "armL",
+    "armR",
+    "pointer"
+  ],
+  "expression_channels": {
+    "eyes": [
+      "open",
+      "closed",
+      "happy",
+      "wide"
+    ],
+    "mouth": [
+      "smile",
+      "open",
+      "wide",
+      "o",
+      "grin"
+    ]
+  },
+  "views_available": [
+    "front"
+  ],
+  "views_missing": [
+    "three_quarter",
+    "profile",
+    "back"
+  ],
+  "ar_presentation": "camera-facing billboard, always front view"
+}

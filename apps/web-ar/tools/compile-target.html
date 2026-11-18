@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>포스터 타깃 컴파일 (개발용)</title>
+    <style>
+      body { font: 15px/1.6 system-ui, 'Malgun Gothic', sans-serif; margin: 24px; background: #0b1a38; color: #f4f8ff; }
+      canvas { height: 300px; margin: 8px 8px 0 0; border: 1px solid #456; background: #fff; }
+      button { font: inherit; padding: 10px 18px; border-radius: 10px; border: 0; background: #ffd44a; cursor: pointer; }
+      pre { white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>포스터 타깃 컴파일</h1>
+    <p>reference/poster_print_master_2526x3576.png 을 sceneLayout.TARGETS 대로 잘라 MindAR <code>.mind</code> 로 컴파일하고 public/assets/targets/poster.mind 에 저장합니다.</p>
+    <button id="go">컴파일 시작</button>
+    <pre id="log"></pre>
+    <div id="previews"></div>
+    <script type="module" src="/src/tools/compileTarget.ts"></script>
+  </body>
+</html>

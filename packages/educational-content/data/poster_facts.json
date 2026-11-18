@@ -1,0 +1,269 @@
+{
+  "schema_version": "1.1",
+  "source_document": "reference/CURT_이규성_Poster.pdf",
+  "provenance_note": "All claims below transcribed or calculated from final supplied academic poster; they are NOT unperformed experiments. The AR explanations should preserve the distinctions in cautions.",
+  "print_format": {
+    "iso": "A1",
+    "width_mm": 594,
+    "height_mm": 841,
+    "orientation": "portrait",
+    "qr_sticker_location": "blank area at bottom right of Conclusions; print target without added QR, retest with QR"
+  },
+  "metadata": {
+    "printed_title": "Temperature-Depending Etching Characteristics of SiC and Cu in a Cryogenic Etching System",
+    "corrected_ar_title": "Temperature-Dependent Etching Characteristics of SiC and Cu in a Cryogenic Etching System",
+    "authors": [
+      "Gyusung Lee",
+      "Suseong Lee",
+      "Munpyo Hong*"
+    ],
+    "affiliation": "Plasma & Device Laboratory, Department of Display & Semiconductor Physics, Korea University Sejong Campus",
+    "star_note": "Corresponding-author designation requires confirmation before adding personal email or attribution."
+  },
+  "facts": [
+    {
+      "id": "semester1_si_glass_benchmark",
+      "kind": "prior_study",
+      "material": [
+        "Si",
+        "glass"
+      ],
+      "etch_rate_nm_per_min": {
+        "si": 930.65,
+        "glass": 155.82
+      },
+      "ratio_si_to_glass": 5.97,
+      "etch_duration_s": 120,
+      "gas": "HCl",
+      "method": "ICP-RIE",
+      "mask": "Cr hard mask",
+      "caution": "Separate prior CURT study; do not merge with SiC/Cu results."
+    },
+    {
+      "id": "sic_continuous_minus50",
+      "kind": "temperature_trace",
+      "material": "SiC",
+      "chiller_setpoint_c": -50,
+      "plasma_on_duration_s": 120,
+      "sample_initial_c": 2.3,
+      "sample_final_c": 73,
+      "holder_initial_c": 3.2,
+      "holder_final_c": 98,
+      "sample_delta_c": 70.7,
+      "holder_delta_c": 94.8,
+      "sample_holder_final_gap_c": 25,
+      "sample_mount": "50 x 20 mm holder",
+      "method": "ICP-RIE",
+      "icp_power_w": 1000,
+      "rie_power_w": 800,
+      "gas": "HCl",
+      "gas_sccm": 50,
+      "working_pressure_mTorr": 2,
+      "he_backside_pressure_torr": 20,
+      "caution": "Chiller setpoint is not measured sample temperature; only endpoints are numerically specified here."
+    },
+    {
+      "id": "sic_cyclic_minus50",
+      "kind": "temperature_trace",
+      "material": "SiC",
+      "chiller_setpoint_c": -50,
+      "sample_support": "8-inch aluminum plate, 500 micrometer thick, vacuum grease",
+      "pulse_duration_s": 30,
+      "cooling_duration_s": 180,
+      "sequence": [
+        {
+          "stage": "initial",
+          "sample_c": 11
+        },
+        {
+          "stage": "etch_1_end",
+          "sample_c": 27
+        },
+        {
+          "stage": "cool_1_end",
+          "sample_c": 14.5
+        },
+        {
+          "stage": "etch_2_end",
+          "sample_c": 30
+        },
+        {
+          "stage": "cool_2_end",
+          "sample_c": 16
+        },
+        {
+          "stage": "etch_3_end",
+          "sample_c": 32
+        }
+      ],
+      "per_pulse_increase_c": [
+        16,
+        15.5,
+        16
+      ],
+      "cooling_recovery_drop_c": [
+        12.5,
+        14
+      ],
+      "method": "ICP-RIE",
+      "icp_power_w": 1000,
+      "rie_power_w": 800,
+      "gas": "HCl",
+      "gas_sccm": 50,
+      "he_backside_pressure_torr": 20,
+      "caution": "The first and second cooling periods occur between 3 plasma pulses; final post-third cooling is NOT part of these data."
+    },
+    {
+      "id": "sic_etch_rate_setpoints",
+      "kind": "etch_rate_matrix",
+      "material": "SiC",
+      "method": "ICP-RIE",
+      "conditions": [
+        {
+          "chiller_setpoint_c": -50,
+          "etch_rate_nm_per_min": 201,
+          "self_bias_v": 116,
+          "sample_temp_at_120s_c": 73
+        },
+        {
+          "chiller_setpoint_c": -40,
+          "etch_rate_nm_per_min": 75,
+          "self_bias_v": 103,
+          "sample_temp_at_120s_c": 123
+        },
+        {
+          "chiller_setpoint_c": -20,
+          "etch_rate_nm_per_min": 185,
+          "self_bias_v": 115,
+          "sample_temp_at_120s_c": 85
+        }
+      ],
+      "gas": "HCl",
+      "gas_sccm": 50,
+      "icp_power_w": 1000,
+      "rie_power_w": 800,
+      "working_pressure_mTorr": 2,
+      "caution": "Measured response is nonmonotonic. Self-bias and surface temperature differ between tests; do not claim isolated chiller temperature causality."
+    },
+    {
+      "id": "sic_mounting_comparison",
+      "kind": "mounting_matrix",
+      "material": "SiC",
+      "chiller_setpoint_c": -50,
+      "duration_s": 120,
+      "conditions": [
+        {
+          "support": "50 x 20 mm holder",
+          "sample_c": 73,
+          "holder_c": 98,
+          "self_bias_v": 116
+        },
+        {
+          "support": "8-in silicon wafer",
+          "sample_c": 92,
+          "holder_c": 130,
+          "self_bias_v": 125
+        },
+        {
+          "support": "8-in aluminum plate without vacuum grease",
+          "sample_c": 78,
+          "holder_c": 102,
+          "self_bias_v": 140
+        },
+        {
+          "support": "8-in aluminum plate with vacuum grease",
+          "sample_c": 76,
+          "holder_c": 114,
+          "self_bias_v": 140
+        }
+      ],
+      "caution": "Not all setups share bias; only paired 8-in Al configurations both show 140V. The 2C difference in the paired test is descriptive, not a fully isolated causal conclusion."
+    },
+    {
+      "id": "cu_profile_postprocessing",
+      "kind": "surface_step_profile",
+      "material": "patterned Cu-containing metal film",
+      "step_unit": "angstrom",
+      "solution": "DI water 200 mL : HCl 3 mL",
+      "comparisons": [
+        {
+          "sample": "No. 2",
+          "after_pr_strip_angstrom": 10999,
+          "after_di_hcl_angstrom": 3662
+        },
+        {
+          "sample": "No. 3",
+          "after_pr_strip_angstrom": 14442,
+          "after_di_hcl_angstrom": 11822
+        },
+        {
+          "sample": "No. 4",
+          "after_pr_strip_angstrom": 11090,
+          "after_di_hcl_angstrom": 10808
+        }
+      ],
+      "measurement": "Alpha-Step profilometry",
+      "caution": "Step heights after PR strip vs after DI/HCl. Not direct copper etch depths, not chemical identity, and not Cu etch rates."
+    },
+    {
+      "id": "mo_reference_etch",
+      "kind": "reference_etch_rate",
+      "material": "Mo",
+      "mo_nominal_thickness_nm": 200,
+      "chiller_setpoint_c": -50,
+      "method": "ECR-RIE",
+      "ecr_power_w": 2800,
+      "rie_power_w": 550,
+      "self_bias_v": 140,
+      "pulse_count": 6,
+      "pulse_duration_s": 10,
+      "cumulative_plasma_on_s": 60,
+      "approx_etch_rate_nm_per_min": 95,
+      "caution": "Separate Mo reference measurement. Mo/Cu/Mo stack on the poster is conceptual, not proof every specimen has that physical structure."
+    }
+  ],
+  "allowed_scene_actions": [
+    "rabbit_greet",
+    "rabbit_explain",
+    "rabbit_surprised",
+    "show_heating",
+    "show_cooling",
+    "show_etch_rate",
+    "show_mounting",
+    "show_cu_profile",
+    "show_mo"
+  ],
+  "safe_explanation_topics": [
+    "research_overview",
+    "plasma_etching_basics",
+    "cryogenic_vs_sample_temp",
+    "helium_backside_cooling",
+    "continuous_heating",
+    "cyclic_cooling",
+    "sic_etch_rate",
+    "mounting_comparison",
+    "cu_step_height",
+    "mo_reference"
+  ],
+  "style": {
+    "language": "ko",
+    "audience": "Korean university first and second year beginner",
+    "character_species": "anthropomorphic rabbit",
+    "character_style": "cute kemomoe furry chibi",
+    "monkey_characters": false,
+    "accessibility": "plain Korean but scientific quantities unchanged",
+    "character_medium": "2D illustration / 2D sprite / 2D rig only",
+    "character_in_ar": "2D sprite or textured plane placed at tracked 3D coordinates",
+    "forbidden_character_forms": [
+      "3D rabbit model",
+      "GLB rabbit mesh",
+      "photorealistic rabbit mascot costume",
+      "monkey character",
+      "independently generated inconsistent character per scene"
+    ],
+    "allow_3d_noncharacter_objects": true,
+    "character_model_ready": false,
+    "user_approved_character_reference_supplied": false
+  },
+  "data_scope": "Final academic poster measurements; no invented etch rates, no completed Cu clean etch claim, no measured SiC/SiO2 selectivity claim."
+}

@@ -1,0 +1,106 @@
+{
+  "schema_version": "1.0",
+  "purpose": "scenes_ko.json 의 각 장면에 붙는 토끼 선생님 대사. 숫자는 전부 poster_facts.json 에서 온다 (test/content.test.ts 가 검사).",
+  "audience": "학부 1·2학년 = '고등학교 5학년' 눈높이",
+  "scripts": [
+    {
+      "id": "intro",
+      "chip": "인사",
+      "highlight": null,
+      "topic": "research_overview",
+      "lines": [
+        "안녕! 나는 토끼 선생님이야.",
+        "반도체는 '플라즈마'로 표면을 아주 조금씩 깎아서 만들어. 그런데 깎는 동안 재료가 뜨거워진대.",
+        "얼마나 뜨거워지는지, 식히면 어떻게 되는지 같이 보자!"
+      ]
+    },
+    {
+      "id": "plasma_basics",
+      "chip": "플라즈마",
+      "highlight": "methods",
+      "topic": "plasma_etching_basics",
+      "lines": [
+        "플라즈마는 기체에 전기 에너지를 줘서 만든 '전기를 띤 알갱이 구름'이야.",
+        "이 알갱이들이 SiC 기판을 두드리고 HCl 가스가 표면과 반응하면서 재료가 깎여. 이걸 '식각'이라고 해.",
+        "두드릴 때 열도 같이 전달돼. 그래서 기판 뒤로 헬륨(He)을 흘려서 차가운 받침대로 열을 빼 줘."
+      ]
+    },
+    {
+      "id": "continuous_heat",
+      "chip": "계속 켜면",
+      "highlight": "results_thermal_continuous",
+      "topic": "continuous_heating",
+      "lines": [
+        "냉각기(칠러)는 −50°C로 맞춰 뒀어.",
+        "그런데 플라즈마를 120초 계속 켰더니 SiC 시편은 2.3°C에서 73°C로, 홀더는 3.2°C에서 98°C로 올라갔어!",
+        "'맞춰 둔 온도'와 '실제로 잰 온도'는 서로 다른 거야."
+      ]
+    },
+    {
+      "id": "cyclic_cooling",
+      "chip": "깎고 쉬기",
+      "highlight": "results_thermal_cyclic",
+      "topic": "cyclic_cooling",
+      "lines": [
+        "이번엔 30초만 깎고 3분 쉬기를 반복했어.",
+        "시편 온도는 11 → 27 → 14.5 → 30 → 16 → 32°C. 깎을 때마다 약 16°C 오르고, 쉬는 동안 12.5~14°C 내려갔어.",
+        "쉬면 식긴 하지만, 처음 온도로 완전히 돌아가진 않았어."
+      ]
+    },
+    {
+      "id": "etch_rates",
+      "chip": "깎는 속도",
+      "highlight": "results_etch_rate",
+      "topic": "sic_etch_rate",
+      "lines": [
+        "칠러를 −50, −40, −20°C로 맞췄을 때 SiC는 1분에 201, 75, 185 nm씩 깎였어.",
+        "차가운 순서대로 줄지도 늘지도 않았지? 그때 전압(self-bias)도 116, 103, 115 V로 달랐어.",
+        "그래서 '온도 하나 때문'이라고 딱 잘라 말할 수는 없어."
+      ]
+    },
+    {
+      "id": "supports",
+      "chip": "받침대",
+      "highlight": "results_mounting",
+      "topic": "mounting_comparison",
+      "lines": [
+        "시편을 올려놓는 받침을 바꾸면 120초 뒤 온도가 달랐어.",
+        "작은 홀더 73°C, 8인치 Si 웨이퍼 92°C, 8인치 Al 판은 그리스 없이 78°C, 그리스를 바르면 76°C.",
+        "다만 전압이 116 / 125 / 140 / 140 V로 서로 달라서, 받침만의 효과라고 단정하긴 일러."
+      ]
+    },
+    {
+      "id": "cu_profiles",
+      "chip": "구리 단차",
+      "highlight": "results_cu_profile",
+      "topic": "cu_step_height",
+      "lines": [
+        "구리(Cu) 무늬 시편은 감광막(PR)을 벗긴 뒤와 묽은 염산으로 처리한 뒤의 '표면 단차'를 쟀어.",
+        "No.2는 10,999 → 3,662 Å, No.3는 14,442 → 11,822 Å, No.4는 11,090 → 10,808 Å.",
+        "이건 표면의 높이 차이를 잰 값이야. 구리가 깎인 두께나 식각 속도가 아니야!"
+      ]
+    },
+    {
+      "id": "mo_reference",
+      "chip": "Mo 참고",
+      "highlight": "results_mo",
+      "topic": "mo_reference",
+      "lines": [
+        "이건 따로 한 참고 실험이야.",
+        "두께 200 nm 몰리브덴(Mo)을 10초씩 6번, 합쳐서 60초 플라즈마에 노출했더니 약 95 nm/min으로 깎였어.",
+        "Mo/Cu/Mo 그림은 이해를 돕는 개념도야. 모든 시편이 실제로 그렇게 쌓여 있다는 뜻은 아니야."
+      ]
+    },
+    {
+      "id": "conclusion",
+      "chip": "정리",
+      "highlight": "conclusions",
+      "topic": "research_overview",
+      "lines": [
+        "오늘 배운 세 가지!",
+        "① 플라즈마를 켜면 칠러 설정보다 훨씬 뜨거워져. ② 잠깐 깎고 쉬면 온도가 일부 되돌아와.",
+        "③ 깎이는 속도는 온도·전압 같은 조건이 함께 바뀌며 달라져. 궁금한 건 아래 채팅으로 물어봐!"
+      ]
+    }
+  ]
+}

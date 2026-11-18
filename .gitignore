@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+*.local
+.devshots/
+
+# 인계 패키지 원본과 연구 참고자료: 공개 저장소에 올릴지 소유자가 결정한다 (docs/SECURITY.md)
+_handoff/
+reference/
+
+# Android
+apps/rabbit-server-android/.gradle/
+apps/rabbit-server-android/**/build/
+apps/rabbit-server-android/local.properties
+apps/rabbit-server-android/.idea/
+*.keystore
+*.jks
+
+# 모델 가중치·비밀값은 절대 커밋 금지
+*.gguf
+*.bin
+*.safetensors
+*.env
