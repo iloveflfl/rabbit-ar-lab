@@ -46,7 +46,7 @@ async function main() {
     }
     if (!up) throw new Error('wrangler dev 가 뜨지 않았습니다');
 
-    const dev = startDesktopDevice({ relayUrl: `ws://127.0.0.1:${PORT}`, token: TOKEN, lmUrl: process.env.LMSTUDIO_URL, model: process.env.LMSTUDIO_MODEL, log: false });
+    const dev = startDesktopDevice({ relayUrl: `ws://127.0.0.1:${PORT}`, token: TOKEN, lmUrl: process.env.LMSTUDIO_URL, model: process.env.LMSTUDIO_MODEL, log: !!process.env.LOG });
     await dev.ready;
 
     const sessionId = newUuid();

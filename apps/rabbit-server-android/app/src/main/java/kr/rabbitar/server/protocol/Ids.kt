@@ -34,7 +34,7 @@ object Ids {
     const val ENGINE_CANNED = "canned"
 
     const val MAX_MESSAGE_CHARS = 300
-    const val MAX_REPLY_CHARS = 900
+    const val MAX_REPLY_CHARS = 2400
     const val MAX_DELTA_CHARS = 400
 
     private val UUID = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", RegexOption.IGNORE_CASE)

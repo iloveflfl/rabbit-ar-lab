@@ -100,7 +100,7 @@ export const LIMITS = {
   /** 관람객 질문 최대 글자 수 */
   maxMessageChars: 300,
   /** 최종 답변 최대 글자 수 (넘으면 릴레이가 자른다) */
-  maxReplyChars: 900,
+  maxReplyChars: 2400,
   /** 스트리밍 조각 하나의 최대 글자 수 */
   maxDeltaChars: 400,
   /** 수신 프레임 최대 바이트 */
@@ -113,12 +113,12 @@ export const LIMITS = {
   maxQueueDepth: 8,
   /** 요청 제한: 세션당 분당 */
   sessionPerMinute: 6,
-  /** 요청 제한: IP당 분당 */
-  ipPerMinute: 20,
+  /** 요청 제한: IP당 분당 (전시장 Wi-Fi 에서는 여러 관람객이 같은 IP 로 보인다) */
+  ipPerMinute: 60,
   /** 하루 총 요청 예산 */
   dailyBudget: 3000,
   /** 요청 하나의 최대 대기 시간 */
-  requestTimeoutMs: 75_000,
+  requestTimeoutMs: 170_000,
   /** 동시에 붙을 수 있는 관람객 소켓 수 */
   maxVisitorSockets: 120,
 } as const;

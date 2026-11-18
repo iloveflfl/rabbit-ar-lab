@@ -140,9 +140,10 @@ describe('LLM 입출력', () => {
 
 describe('데스크탑(LM Studio) 단말용 프롬프트', () => {
   it('시스템 프롬프트에 규칙·모든 포스터 사실·대본이 들어 있다', async () => {
-    const { fullSystemPrompt, llmContext, sceneScripts } = await import('../src/index');
+    const { fullSystemPrompt, llmContext, sceneScripts, desktopPrompt } = await import('../src/index');
     const s = fullSystemPrompt();
-    expect(s).toContain(llmContext.system_prompt);
+    expect(s).toContain(desktopPrompt.system_prompt);
+    expect(s).toContain(desktopPrompt.primer[0]);
     for (const d of Object.values(llmContext.facts_digest)) expect(s).toContain(d);
     expect(s).toContain(sceneScripts[0].lines[0]);
   });
@@ -160,5 +161,27 @@ describe('데스크탑(LM Studio) 단말용 프롬프트', () => {
     expect(findUnknownNumbers('−50, −40, −20°C에서 201, 75, 185 nm/min 이야. 2가지 이유가 있어.')).toEqual([]);
     expect(findUnknownNumbers('영하 100도에서는 식각률이 312 nm/min 이야.')).toEqual(['100', '312']);
     expect(findUnknownNumbers('영하 100도 자료는 없어.', '영하 100도면 어때?')).toEqual([]);
+  });
+});
+
+describe('큰 모델 출력 정리', () => {
+  it('숨은 메모와 동작 태그를 떼고 문단은 살린다', async () => {
+    const { parseDesktopOutput, stripThinking } = await import('../src/index');
+    const raw = '<생각>의도: 온도 차이\n사실: 73도</생각>\n칠러는 **설정값**이야.\n\n시편은 73°C까지 올라갔어!\n#동작: show_heating';
+    expect(parseDesktopOutput(raw, SCENE_ACTIONS)).toEqual({ reply: '칠러는 설정값이야.\n\n시편은 73°C까지 올라갔어!', animation: 'show_heating' });
+    expect(stripThinking('<생각>아직 쓰는 중')).toBe('');
+    expect(stripThinking('<생')).toBe('');
+    expect(stripThinking('안녕 <생각>a</생각>반가워')).toBe('안녕 반가워');
+  });
+
+  it('지어낸 측정값 문장만 빼고 일반 지식의 숫자는 둔다', async () => {
+    const { filterInventedMeasurements } = await import('../src/index');
+    const ok = '플라즈마 속 전자는 보통 수만 도에 해당하는 에너지를 가져. 이 실험에서 시편은 73°C까지 올라갔어.';
+    expect(filterInventedMeasurements(ok).removed).toEqual([]);
+    const general = 'SiC는 일반적으로 2700도 근처까지 버티는 단단한 재료야.';
+    expect(filterInventedMeasurements(general).reply).toBe(general);
+    const bad = filterInventedMeasurements('칠러는 설정값일 뿐이야. 이 실험에서 시편은 412°C까지 올라갔어. 그래서 진짜 온도를 재야 해.');
+    expect(bad.removed).toHaveLength(1);
+    expect(bad.reply).toBe('칠러는 설정값일 뿐이야. 그래서 진짜 온도를 재야 해.');
   });
 });

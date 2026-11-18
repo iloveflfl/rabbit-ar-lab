@@ -4,6 +4,7 @@ import scenesJson from '../data/scenes_ko.json';
 import scriptsJson from '../data/scene_scripts_ko.json';
 import qaJson from '../data/qa_ko.json';
 import llmJson from '../data/llm_ko.json';
+import desktopJson from '../data/desktop_prompt_ko.json';
 
 export const posterFacts = factsJson;
 export const scenes = scenesJson.scenes;
@@ -172,6 +173,12 @@ export interface ChatTurn {
   a: string;
 }
 
+/** 전시자 PC 의 큰 모델용 지침과 배경지식 */
+export const desktopPrompt = {
+  system_prompt: (desktopJson.system_prompt as string[]).join('\n'),
+  primer: desktopJson.primer as string[],
+};
+
 let fullSystemCache: string | null = null;
 
 /**
@@ -186,7 +193,8 @@ export function fullSystemPrompt(): string {
   const scripts = sceneScripts.map((s) => `(${s.chip}) ${s.lines.join(' ')}`).join('\n');
   const examples = qa.entries.map((e) => `- ${e.reply}`).join('\n');
   fullSystemCache = [
-    llmContext.system_prompt,
+    desktopPrompt.system_prompt,
+    `[배경지식 — 쉬운 설명에 쓰는 일반 과학. 이 실험의 측정값이 아니다]\n${desktopPrompt.primer.map((t) => `- ${t}`).join('\n')}`,
     `[포스터 사실]\n${digest}`,
     `[포스터 원자료 JSON — 위 요약과 같은 내용의 원본. 숫자는 여기 있는 값만 쓴다]\n${JSON.stringify(posterFacts)}`,
     `[장면별 설명 대본 — 말투와 눈높이는 이것을 따라 한다]\n${scripts}`,
@@ -223,4 +231,80 @@ function numbersIn(s: string): string[] {
 export function findUnknownNumbers(reply: string, question = ''): string[] {
   const allowed = new Set(numbersIn(fullSystemPrompt() + ' ' + question));
   return numbersIn(reply).filter((n) => !allowed.has(n) && !(Number.isInteger(Number(n)) && Number(n) <= 10));
+}
+
+/** 이 실험의 측정 이야기를 하고 있다는 표지. 이런 문장에 자료에 없는 숫자가 있으면 지어낸 측정값으로 본다. */
+const EXPERIMENT_WORDS = ['시편', '홀더', '칠러', '식각률', 'nm/min', 'self-bias', '바이어스', '단차', 'Å', '이 실험', '이번 실험', '포스터', '측정', '쟀', 'sccm', 'mTorr'];
+/** 일반 지식이나 추측이라고 밝힌 표지 */
+const GENERAL_WORDS = ['보통', '일반적으로', '대략', '흔히', '예를 들어', '예를 들면', '추측', '가정', '만약', '비유', '쯤', '정도'];
+
+/**
+ * 답변에서 "지어낸 측정값"으로 보이는 문장만 골라 뺀다.
+ * 자료(포스터 + 배경지식 + 질문)에 없는 숫자가 있고, 그 문장이 이 실험의 측정을 말하고 있으며,
+ * 일반 지식·추측이라고 밝히지 않았을 때만 뺀다. 일반 과학 설명의 숫자는 그대로 둔다.
+ */
+export function filterInventedMeasurements(reply: string, question = ''): { reply: string; removed: string[] } {
+  const removed: string[] = [];
+  const paragraphs = reply.split(/\n{2,}/).map((para) => {
+    const sentences = para.match(/[^.!?。]+[.!?。]+["')\]]*\s*|[^.!?。]+$/g) ?? [para];
+    return sentences
+      .filter((s) => {
+        if (findUnknownNumbers(s, question).length === 0) return true;
+        const experimental = EXPERIMENT_WORDS.some((w) => s.includes(w));
+        const general = GENERAL_WORDS.some((w) => s.includes(w));
+        if (experimental && !general) {
+          removed.push(s.trim());
+          return false;
+        }
+        return true;
+      })
+      .join('')
+      .trim();
+  });
+  return { reply: paragraphs.filter(Boolean).join('\n\n'), removed };
+}
+
+const THINK_OPEN = '<생각>';
+const THINK_CLOSE = '</생각>';
+
+/** 모델 출력에서 숨은 메모(<생각>…</생각>)를 뺀다. 아직 닫히지 않았으면 메모가 시작된 곳부터 전부 뺀다. */
+export function stripThinking(raw: string): string {
+  let s = raw;
+  for (;;) {
+    const a = s.indexOf(THINK_OPEN);
+    if (a < 0) break;
+    const b = s.indexOf(THINK_CLOSE, a);
+    s = b < 0 ? s.slice(0, a) : s.slice(0, a) + s.slice(b + THINK_CLOSE.length);
+  }
+  // 스트리밍 중에 '<생' 처럼 태그가 반쯤 온 경우도 가린다.
+  for (let n = THINK_OPEN.length - 1; n > 0; n--) {
+    if (s.endsWith(THINK_OPEN.slice(0, n))) return s.slice(0, -n);
+  }
+  return s;
+}
+
+/** 큰 모델의 출력 정리: 숨은 메모와 '#동작:' 줄을 떼고, 마크다운 기호를 지우되 문단 나눔은 살린다. */
+export function parseDesktopOutput(raw: string, allowed: readonly string[]): { reply: string; animation: string | null } {
+  const tag = llmContext.action_tag;
+  let animation: string | null = null;
+  const lines: string[] = [];
+  for (const line of stripThinking(raw).split(/\r?\n/)) {
+    const t = line.trim();
+    const i = t.indexOf(tag);
+    if (i >= 0) {
+      const id = t.slice(i + tag.length).trim().replace(/[^a-z_]/g, '');
+      if (animation === null && allowed.includes(id)) animation = id;
+      const before = t.slice(0, i).trim();
+      if (before) lines.push(before);
+      continue;
+    }
+    lines.push(t);
+  }
+  const reply = lines
+    .join('\n')
+    .replace(/[*_`#<>]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{2,}/g, '\n\n')
+    .trim();
+  return { reply, animation };
 }

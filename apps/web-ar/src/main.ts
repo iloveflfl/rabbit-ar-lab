@@ -141,6 +141,12 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: {
 
   let currentTopic: TopicId = 'general';
   let currentPanel: HighlightId | null = null;
+  let typing = false;
+  const setTyping = (on: boolean) => {
+    typing = on;
+    kbSeen = false;
+    if (touch) root.classList.toggle('typing', on);
+  };
   const panel = new ChatPanel(chat, {
     context: () => ({ topic: currentTopic, panel: currentPanel }),
     onThinking: (on) => stage.setThinking(on),
@@ -150,6 +156,7 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: {
       caption.style.display = s === 'idle' ? '' : 'none';
       chips.style.display = s === 'open' ? 'none' : '';
     },
+    onTyping: (on) => setTyping(on),
   });
 
   /* 자막 타이핑 */
@@ -174,7 +181,9 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: {
     currentTopic = sceneScripts[e.index].topic;
     currentPanel = e.highlight;
     chipEls.forEach((c, i) => c.setAttribute('aria-current', String(i === e.index)));
-    chipEls[e.index].scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    // scrollIntoView 는 화면 전체까지 밀 수 있다(키보드가 떠 있을 때 화면이 튄다). 칩 줄 안에서만 움직인다.
+    const chip = chipEls[e.index];
+    chips.scrollTo({ left: chip.offsetLeft - (chips.clientWidth - chip.offsetWidth) / 2, behavior: 'smooth' });
     caption.hidden = false;
     chips.hidden = false;
     capTitle.textContent = e.title;
@@ -215,25 +224,20 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: {
   );
   app.replaceChildren(root);
 
-  // 화면 키보드: 레이아웃은 그대로 두고 아래 UI 만 키보드 위로 올린다(카메라 화면 크기는 변하지 않는다).
+  // 화면 키보드: 키보드 높이를 재서 입력창을 그 위에 맞추는 방식은 폰마다(특히 AR 전체화면에서) 값이 흔들려
+  // 입력창이 깜빡였다. 그래서 터치 기기에서는 입력하는 동안 채팅을 화면 "위쪽"에 고정한다.
+  // 키보드는 아래에서 올라오므로 위쪽은 항상 보이고, 키보드 높이를 알 필요가 없다.
   const vv = window.visualViewport;
-  //   글자를 칠 때마다 브라우저가 보이는 영역을 조금씩 밀고 당기는데(scroll, 한글 조합 중 추천 줄 높이 변화),
-  //   그걸 그대로 따라가면 입력창이 위아래로 떨리며 깜빡인다. 그래서 키보드가 뜨고 지는 큰 변화만 반영한다.
-  let kbShown = 0;
-  let kbRaf = 0;
-  const applyKb = () => {
-    kbRaf = 0;
-    const raw = vv ? Math.max(0, window.innerHeight - vv.height) : 0;
-    const kb = raw < 90 ? 0 : Math.round(raw);
-    if (Math.abs(kb - kbShown) < 28) return;
-    kbShown = kb;
-    root.style.setProperty('--kb', `${kb}px`);
-  };
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+  let kbSeen = false;
   const onViewport = () => {
-    if (!kbRaf) kbRaf = requestAnimationFrame(applyKb);
+    if (!typing || !vv) return;
+    const open = vv.height < window.innerHeight * 0.8;
+    if (open) kbSeen = true;
+    else if (kbSeen) panel.blurInput(); // 뒤로가기로 키보드만 내린 경우: 입력 상태도 끝낸다
   };
   vv?.addEventListener('resize', onViewport);
-  applyKb();
+  view.addEventListener('pointerdown', () => typing && panel.blurInput());
 
   const setStatus = (s: TrackState | 'viewer') => {
     statusPill.dataset.s = s;
@@ -246,7 +250,6 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: {
   const cleanup: Array<() => void> = [
     () => clearInterval(typeTimer),
     () => vv?.removeEventListener('resize', onViewport),
-    () => cancelAnimationFrame(kbRaf),
   ];
   return { stage, view, bottom, root, setStatus, cleanup, debugBox };
 }

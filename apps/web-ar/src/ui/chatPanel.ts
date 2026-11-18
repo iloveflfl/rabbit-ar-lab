@@ -36,6 +36,8 @@ export interface ChatPanelHooks {
   onTalking(on: boolean): void;
   onAnswer(a: Answer): void;
   onStateChange(state: 'idle' | 'peek' | 'open'): void;
+  /** 입력창에 커서가 들어갔다/나왔다 */
+  onTyping(on: boolean): void;
 }
 
 export class ChatPanel {
@@ -62,6 +64,17 @@ export class ChatPanel {
       this.submit(this.input.value);
     });
     this.el = h('div', { class: 'chat', 'data-state': 'idle' }, h('div', { class: 'chat-top' }, h('span', { text: '토끼 선생님과의 대화' }), h('span', { class: 'grow' }), this.toggleBtn, closeBtn), this.log, this.quick, form, this.link);
+    // 입력 중 표시: 잠깐의 blur(보내기 버튼을 누르는 순간 등)에 화면이 출렁이지 않게 조금 늦춰서 끈다.
+    let blurTimer = 0;
+    this.input.addEventListener('focus', () => {
+      clearTimeout(blurTimer);
+      this.hooks.onTyping(true);
+    });
+    this.input.addEventListener('blur', () => {
+      blurTimer = window.setTimeout(() => {
+        if (document.activeElement !== this.input) this.hooks.onTyping(false);
+      }, 200);
+    });
     chat.onStatus = (s) => this.renderLink(s);
     this.renderLink(chat.linkStatus);
   }
@@ -142,6 +155,8 @@ export class ChatPanel {
       return;
     }
     this.input.value = '';
+    // 보낸 뒤에는 키보드를 내려서 답변과 토끼가 보이게 한다.
+    this.input.blur();
     this.sendBtn.disabled = true;
     this.hooks.onThinking(true);
     if (this.state === 'idle') this.setState('peek');
@@ -149,5 +164,9 @@ export class ChatPanel {
 
   focusInput(): void {
     this.input.focus();
+  }
+
+  blurInput(): void {
+    this.input.blur();
   }
 }

@@ -16,14 +16,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { CLIENT_VERSION, LIMITS, PROTOCOL_VERSION, SCENE_ACTIONS, type DeviceChatRequest, type SceneAction } from '@rabbit/shared';
-import { buildFullPrompt, findUnknownNumbers, matchCanned, parseModelOutput, type ChatTurn } from '@rabbit/content';
+import { buildFullPrompt, filterInventedMeasurements, matchCanned, parseDesktopOutput, stripThinking, type ChatTurn } from '@rabbit/content';
 
 export interface DesktopDeviceOptions {
   relayUrl: string;
   token: string;
   lmUrl?: string;
   model?: string;
-  /** 모델 한 번 호출의 최대 시간. 릴레이의 요청 제한(75초)보다 짧아야 한다. */
+  /** 모델 한 번 호출의 최대 시간. 릴레이의 요청 제한(170초)보다 짧아야 한다. */
   timeoutMs?: number;
   log?: boolean;
   /** 같은 토큰의 다른 서버에게 자리를 내줬을 때 */
@@ -37,16 +37,21 @@ export interface DesktopDevice {
   stats: { answered: number; llm: number; canned: number; rejectedNumbers: number; errors: number };
 }
 
-/** 스트리밍 중 화면에 보여 줄 부분: 동작 태그('#…') 앞까지, 마크다운 기호 제거. */
+/** 스트리밍 중 화면에 보여 줄 부분: 숨은 메모를 빼고, 동작 태그('#…') 앞까지, 마크다운 기호 제거. 문단 나눔은 살린다. */
 function visibleText(raw: string): string {
-  const cut = raw.indexOf('#');
-  return (cut >= 0 ? raw.slice(0, cut) : raw).replace(/[*_`<>]/g, '').replace(/\s+/g, ' ').trimStart();
+  const s = stripThinking(raw);
+  const cut = s.indexOf('#');
+  return (cut >= 0 ? s.slice(0, cut) : s)
+    .replace(/[*_`<>]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{2,}/g, '\n\n')
+    .trimStart();
 }
 
 export function startDesktopDevice(opts: DesktopDeviceOptions): DesktopDevice {
   const lmUrl = (opts.lmUrl ?? 'http://127.0.0.1:1234').replace(/\/$/, '');
   const model = opts.model ?? 'gemma-4-26b-a4b-it-uncensored';
-  const timeoutMs = opts.timeoutMs ?? 60_000;
+  const timeoutMs = opts.timeoutMs ?? 150_000;
   const log = (...a: unknown[]) => opts.log !== false && console.log(new Date().toLocaleTimeString('ko-KR', { hour12: false }), '[desktop]', ...a);
   const url = opts.relayUrl.replace(/^http/, 'ws').replace(/\/$/, '') + '/device/connect';
   const stats = { answered: 0, llm: 0, canned: 0, rejectedNumbers: 0, errors: 0 };
@@ -157,7 +162,7 @@ export function startDesktopDevice(opts: DesktopDeviceOptions): DesktopDevice {
         fetch(`${lmUrl}/v1/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, messages: prompt.messages, stream: true, temperature: 0.4, max_tokens: 450 }),
+          body: JSON.stringify({ model, messages: prompt.messages, stream: true, temperature: 0.6, max_tokens: 1000 }),
           signal: ac.signal,
         });
       // LM Studio 가 막 켜지는 중이거나 잠깐 끊긴 경우를 위해 한 번은 다시 시도한다.
@@ -212,15 +217,17 @@ export function startDesktopDevice(opts: DesktopDeviceOptions): DesktopDevice {
     aborters.delete(req.requestId);
     if (cancelled.delete(req.requestId)) return;
 
-    const parsed = parseModelOutput(raw, SCENE_ACTIONS);
+    const parsed = parseDesktopOutput(raw, SCENE_ACTIONS);
+    // 지어낸 측정값으로 보이는 문장만 뺀다. 일반 과학 설명의 숫자는 그대로 둔다.
+    const checked = filterInventedMeasurements(parsed.reply, req.message);
+    if (checked.removed.length) {
+      stats.rejectedNumbers++;
+      log(`  (자료에 없는 측정값 문장 ${checked.removed.length}개 삭제: ${checked.removed.join(' / ').slice(0, 160)})`);
+    }
+    parsed.reply = checked.reply.slice(0, LIMITS.maxReplyChars);
     if (!parsed.reply) {
       stats.errors++;
       return sendCanned('빈 답변');
-    }
-    const unknown = findUnknownNumbers(parsed.reply, req.message);
-    if (unknown.length) {
-      stats.rejectedNumbers++;
-      return sendCanned(`자료에 없는 숫자 ${unknown.join(', ')}`);
     }
 
     stats.llm++;
@@ -239,7 +246,7 @@ export function startDesktopDevice(opts: DesktopDeviceOptions): DesktopDevice {
     log(`  → ${((Date.now() - t0) / 1000).toFixed(1)}초, ${parsed.reply.length}자, 동작 ${animation}`);
 
     history.delete(req.sessionId);
-    history.set(req.sessionId, [...turns, { q: req.message, a: parsed.reply }].slice(-2));
+    history.set(req.sessionId, [...turns, { q: req.message, a: parsed.reply }].slice(-4));
     if (history.size > 200) history.delete(history.keys().next().value!);
   }
 
