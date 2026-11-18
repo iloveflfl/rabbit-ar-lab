@@ -115,10 +115,29 @@ export function startDesktopDevice(opts: DesktopDeviceOptions): DesktopDevice {
       }
       if (closed) return;
       if (ev.code === 4001) {
-        // 같은 토큰으로 서버가 하나 더 켜졌다. 여기서 다시 붙으면 서로 연결을 빼앗으며 끝없이 끊긴다.
-        closed = true;
-        log('다른 창에서 토끼 서버가 켜져서 이 서버는 멈춥니다. (서버는 한 번에 하나만 켜 두세요)');
-        opts.onReplaced?.();
+        // 릴레이가 "다른 서버로 바뀌었다"며 끊었다. 정말 다른 서버가 붙어 있는지 확인한 뒤에만 멈춘다
+        // (릴레이가 옛 연결을 정리하다 잘못 끊는 경우가 있었다. 그때는 그냥 다시 붙으면 된다).
+        void (async () => {
+          await new Promise((r) => setTimeout(r, 2500));
+          let other = false;
+          try {
+            const r = await fetch(url.replace(/^ws/, 'http').replace(/\/device\/connect$/, '/device/status'), { headers: { Authorization: `Bearer ${opts.token}` }, signal: AbortSignal.timeout(8000) });
+            const st = ((await r.json()) as { status?: string }).status;
+            other = st === 'online' || st === 'busy';
+          } catch {
+            /* 확인하지 못하면 다시 붙어 본다 */
+          }
+          if (closed) return;
+          if (other) {
+            // 같은 토큰으로 서버가 하나 더 켜져 있다. 여기서 다시 붙으면 서로 연결을 빼앗으며 끝없이 끊긴다.
+            closed = true;
+            log('다른 창에서 토끼 서버가 켜져 있어서 이 서버는 멈춥니다. (서버는 한 번에 하나만 켜 두세요)');
+            opts.onReplaced?.();
+          } else {
+            log('릴레이가 연결을 정리했습니다. 다시 붙습니다.');
+            connect();
+          }
+        })();
         return;
       }
       log(`릴레이 연결 끊김 (${ev.code}${ev.code === 1006 ? ' — 주소나 토큰을 확인' : ''}). ${Math.round(backoff / 1000)}초 뒤 재접속`);

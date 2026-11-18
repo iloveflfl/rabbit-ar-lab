@@ -21,6 +21,8 @@ export interface Conn {
   readonly id: string;
   send(data: string): void;
   close(code: number, reason: string): void;
+  /** 이 연결을 더는 쓰지 않는다고 표시한다 (휴면에서 깨어날 때 다시 등록되지 않도록). */
+  retire?(): void;
   /** 휴면(hibernation) 뒤에도 살아남아야 하는 최소 정보를 소켓에 붙여 둔다. */
   persist?(meta: ConnMeta): void;
 }
@@ -88,6 +90,7 @@ export class RelayCore {
       // 이전 단말이 만들던 답은 이제 올 수 없다. 바로 실패를 알려야 관람객이 시간 초과까지 기다리지 않는다.
       for (const p of [...this.pending.values()]) this.failPending(p, 'device_disconnected', '토끼 서버 연결이 끊어졌어요.');
       try {
+        old.retire?.();
         old.close(4001, 'replaced');
       } catch {
         /* 이미 닫힘 */

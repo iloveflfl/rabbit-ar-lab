@@ -104,12 +104,29 @@ export class RelayRoom extends DurableObject<Env> {
       this.core.loadBudget(await this.ctx.storage.get<Budget>('budget'));
     });
     // 휴면에서 깨어났다면 살아 있는 소켓을 다시 등록한다.
+    // 단말 소켓이 둘 이상 남아 있을 수 있다(끊긴 줄 모르고 남은 옛 연결 + 다시 붙은 새 연결).
+    // 예전에는 순서대로 등록하면서 뒤의 것이 앞의 것을 밀어냈는데, 그 순서가 뒤집히면
+    // 멀쩡한 새 연결을 "다른 서버가 켜졌다"(4001)며 끊어 버렸다. 가장 최근에 붙은 열린 소켓 하나만 살린다.
+    const devices: Array<{ ws: WebSocket; meta: Extract<ConnMeta, { role: 'device' }> & { id: string } }> = [];
     for (const ws of this.ctx.getWebSockets()) {
       const meta = ws.deserializeAttachment() as (ConnMeta & { id: string }) | null;
       if (!meta) continue;
-      const conn = this.wrap(ws, meta.id);
-      if (meta.role === 'device') this.core.attachDevice(conn, { engine: meta.engine, connectedAt: meta.connectedAt, hello: meta.hello });
-      else this.core.attachVisitor(conn, meta.ip, meta.sessionId);
+      if (meta.role === 'device') devices.push({ ws, meta });
+      else this.core.attachVisitor(this.wrap(ws, meta.id), meta.ip, meta.sessionId);
+    }
+    devices.sort((a, b) => b.meta.connectedAt - a.meta.connectedAt);
+    const live = devices.find((d) => d.ws.readyState === 1) ?? null;
+    for (const d of devices) {
+      if (d === live) {
+        this.core.attachDevice(this.wrap(d.ws, d.meta.id), { engine: d.meta.engine, connectedAt: d.meta.connectedAt, hello: d.meta.hello });
+        continue;
+      }
+      try {
+        d.ws.serializeAttachment(null);
+        d.ws.close(4004, 'stale');
+      } catch {
+        /* 이미 닫힘 */
+      }
     }
   }
 
@@ -125,6 +142,13 @@ export class RelayRoom extends DurableObject<Env> {
         }
       },
       persist: (meta) => ws.serializeAttachment({ ...meta, id }),
+      retire: () => {
+        try {
+          ws.serializeAttachment(null);
+        } catch {
+          /* 이미 닫힘 */
+        }
+      },
     };
     this.conns.set(ws, conn);
     return conn;
