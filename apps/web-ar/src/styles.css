@@ -741,3 +741,7 @@ html.xr-active body {
   background: rgba(95, 211, 255, 0.22);
   border-color: rgba(95, 211, 255, 0.55);
 }
+.badge.lmstudio {
+  background: rgba(95, 211, 255, 0.2);
+  border-color: rgba(95, 211, 255, 0.5);
+}

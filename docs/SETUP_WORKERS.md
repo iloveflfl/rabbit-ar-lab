@@ -36,7 +36,7 @@ npm -w @rabbit/relay-worker run token
 cd apps/relay-worker && npx wrangler secret put DEVICE_TOKEN
 ```
 
-`wrangler.jsonc` 의 `ALLOWED_ORIGINS` 를 GitHub Pages 출처로 바꾼 뒤 배포한다.
+배포 스크립트가 `ALLOWED_ORIGINS` 를 GitHub Pages 출처(`https://iloveflfl.github.io`)로 넣는다. 출처가 바뀌면 `apps/relay-worker/package.json` 의 `deploy` 를 고친다.
 
 ```bash
 npm run relay:deploy
@@ -46,7 +46,9 @@ npm run relay:deploy
 Worker 이름과 계정 서브도메인을 바꾸지 않는 한 유지된다. 이 주소를
 
 - 웹 빌드의 `VITE_RELAY_URL` 에,
-- 폰 앱의 최초 설정 "릴레이 주소" 에 넣는다. 같은 토큰을 앱의 "단말 토큰" 에 넣는다.
+- 데스크탑 서버의 `desktop-server.env` (`RELAY_URL`, `DEVICE_TOKEN`) 에 넣는다 (DESKTOP_SERVER.md). 폰 앱을 쓸 때는 앱의 최초 설정에 넣는다.
+
+현재 배포된 주소: `https://rabbit-ar-relay.rabbit-relay-worker.workers.dev` (2026-11-19).
 
 요금제: Durable Object 는 SQLite 기반(`new_sqlite_classes`)으로 선언해 Workers Free 에서도 쓸 수 있게 했다.
 무료 한도(요청 수, DO 사용 시간)는 배포 전에 Cloudflare 문서에서 현재 값을 확인한다. 실제 배포는 아직 해 보지 않았다.

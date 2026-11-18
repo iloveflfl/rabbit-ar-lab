@@ -92,6 +92,7 @@ cd apps/rabbit-server-android && ./gradlew testDebugUnitTest assembleDebug
 | [docs/DEV_SETUP.md](docs/DEV_SETUP.md) | 개발 환경, 명령, 개발용 도구 |
 | [docs/DEPLOY_GITHUB_PAGES.md](docs/DEPLOY_GITHUB_PAGES.md) | 웹 배포와 QR |
 | [docs/SETUP_WORKERS.md](docs/SETUP_WORKERS.md) | 릴레이 배포, 토큰, Named Tunnel 대안 검토 |
+| [docs/DESKTOP_SERVER.md](docs/DESKTOP_SERVER.md) | 전시자 PC 의 LM Studio(Gemma 4)로 답하는 구성, 켜는 법, 실측 |
 | [docs/INSTALL_ANDROID.md](docs/INSTALL_ANDROID.md) | 앱 설치, 최초 설정, 원터치 운영 |
 | [docs/DEVICE_VERIFICATION.md](docs/DEVICE_VERIFICATION.md) | S26 Ultra 실기기에서 확인할 것 |
 | [docs/AR_CALIBRATION.md](docs/AR_CALIBRATION.md) | 좌표계, 타깃, 정합 측정값, 조정 방법 |

@@ -16,12 +16,13 @@
 |---|---|
 | 웹 2D 보기, 장면 연출, 토끼 리그, 채팅 UI | 자동화 (브라우저에서 실행·스크린샷 확인) |
 | 포스터 이미지 추적 + 전체 덮어쓰기 | **모의** (가상 카메라). 실물 포스터·실제 폰 카메라는 **미검증** |
-| 릴레이 (Worker + Durable Object) | 자동화 (로컬 workerd 런타임 E2E). 실제 Cloudflare 배포는 **미검증** |
+| 릴레이 (Worker + Durable Object) | 자동화 (로컬 workerd 런타임 E2E) + **실측** (2026-11-19 Cloudflare 배포본에 관람객 소켓으로 질문 3개 왕복) |
+| 데스크탑 서버 (LM Studio + Gemma 4) | **실측** (이 PC). 로컬 릴레이로 질문 8개, 배포된 릴레이로 질문 3개 모두 모델이 답함: 첫 글자 2.0~3.6초, 전체 7~17초. 동시 접속·장시간 운영은 **미검증** (docs/DESKTOP_SERVER.md) |
 | Android 앱 | 자동화 (단위 테스트 15개, debug APK 빌드). 실기기 설치·실행은 **미검증** |
 | GenieX 온디바이스 추론 / NPU | **미검증** — 실제 SDK 0.10.0 에 맞춰 컴파일만 확인. 모델을 한 번도 실행하지 못함 |
 | GitHub Pages 배포 | **실측** — https://iloveflfl.github.io/rabbit-ar-lab/ (2026-11-18, Actions 로 배포, 데스크톱 브라우저에서 2D 보기 확인) |
 | QR 이미지 | 생성됨 (`assets/qr/`). 인쇄·부착·폰으로 읽기는 **미검증** |
-| 릴레이 고정 주소 (Cloudflare) | **미배포** — 소유자가 나중에 하기로 함. 지금 공개 사이트의 채팅은 사전제작 답변으로만 동작 |
+| 릴레이 고정 주소 (Cloudflare) | **배포됨** (2026-11-19) — https://rabbit-ar-relay.rabbit-relay-worker.workers.dev . 허용 출처는 `https://iloveflfl.github.io`. 데스크탑 서버가 꺼져 있으면 채팅은 사전제작 답변으로 동작 |
 
 ## 1. 관람객용 WebAR
 
@@ -108,9 +109,9 @@
 ## 5. 소유자가 해야 하는 일 (순서대로)
 
 1. ~~GitHub 저장소·Pages 배포~~ — 완료 (iloveflfl/rabbit-ar-lab, 이전 내용은 `legacy-2026-11-16` 브랜치에 보존).
-2. Cloudflare 에 릴레이 배포, `DEVICE_TOKEN` 등록 → 주소 확정 (SETUP_WORKERS.md).
-3. 저장소 Settings → Variables 에 `VITE_RELAY_URL` 을 넣고 Pages 워크플로를 다시 실행.
-4. 릴레이의 `ALLOWED_ORIGINS` 를 `https://iloveflfl.github.io` 로 설정.
-5. S26 Ultra 에 APK 설치, 최초 설정, 모델 선택·시험 (INSTALL_ANDROID.md, DEVICE_VERIFICATION.md).
+2. ~~Cloudflare 에 릴레이 배포, `DEVICE_TOKEN` 등록~~ — 완료 (2026-11-19).
+3. ~~`VITE_RELAY_URL` 저장소 변수~~ — 완료.
+4. ~~릴레이의 `ALLOWED_ORIGINS`~~ — 완료 (`npm run relay:deploy` 가 항상 넣는다).
+5. 전시 때 `토끼 서버 시작.bat` 으로 데스크탑 서버를 켠다 (DESKTOP_SERVER.md). 폰 앱(GenieX) 경로는 쓰지 않기로 했고 여전히 **미검증**이다.
 6. 인쇄된 포스터로 인식 시험, 필요하면 필터·타깃 조정 (AR_CALIBRATION.md).
 7. `assets/qr/poster-qr.png` 인쇄(한 변 45~50 mm)·부착, 부착 후 다시 인식 시험.

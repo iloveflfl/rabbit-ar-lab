@@ -137,3 +137,28 @@ describe('LLM 입출력', () => {
     expect(parseModelOutput('**굵게** <b>x</b>', SCENE_ACTIONS).reply).toBe('굵게 bx/b');
   });
 });
+
+describe('데스크탑(LM Studio) 단말용 프롬프트', () => {
+  it('시스템 프롬프트에 규칙·모든 포스터 사실·대본이 들어 있다', async () => {
+    const { fullSystemPrompt, llmContext, sceneScripts } = await import('../src/index');
+    const s = fullSystemPrompt();
+    expect(s).toContain(llmContext.system_prompt);
+    for (const d of Object.values(llmContext.facts_digest)) expect(s).toContain(d);
+    expect(s).toContain(sceneScripts[0].lines[0]);
+  });
+
+  it('직전 대화를 user/assistant 순서로 끼워 넣는다', async () => {
+    const { buildFullPrompt } = await import('../src/index');
+    const p = buildFullPrompt('더 자세히', 'general', [{ q: '왜 73도야?', a: '플라즈마가 열을 넣어서야.' }]);
+    expect(p.messages.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'user']);
+    expect(p.messages.at(-1)!.content).toBe('더 자세히');
+  });
+
+  it('포스터 자료에 없는 숫자를 잡아낸다', async () => {
+    const { findUnknownNumbers } = await import('../src/index');
+    expect(findUnknownNumbers('시편은 2.3°C에서 73°C까지, 단차는 10,999 Å에서 3,662 Å로 바뀌었어.')).toEqual([]);
+    expect(findUnknownNumbers('−50, −40, −20°C에서 201, 75, 185 nm/min 이야. 2가지 이유가 있어.')).toEqual([]);
+    expect(findUnknownNumbers('영하 100도에서는 식각률이 312 nm/min 이야.')).toEqual(['100', '312']);
+    expect(findUnknownNumbers('영하 100도 자료는 없어.', '영하 100도면 어때?')).toEqual([]);
+  });
+});

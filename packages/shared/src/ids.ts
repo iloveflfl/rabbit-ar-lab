@@ -76,7 +76,7 @@ export const RABBIT_CLIPS = [
 export type RabbitClip = (typeof RABBIT_CLIPS)[number];
 
 /** 답변을 만든 주체. 화면에 그대로 구분 표시한다. */
-export const ENGINES = ['geniex', 'mock', 'canned'] as const;
+export const ENGINES = ['geniex', 'lmstudio', 'mock', 'canned'] as const;
 export type Engine = (typeof ENGINES)[number];
 
 export const SERVER_STATUSES = ['online', 'offline', 'busy'] as const;

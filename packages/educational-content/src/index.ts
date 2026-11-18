@@ -164,3 +164,63 @@ export function parseModelOutput(raw: string, allowed: readonly string[]): { rep
   const reply = kept.join(' ').replace(/[*_`#<>]/g, '').replace(/\s+/g, ' ').trim();
   return { reply, animation };
 }
+
+/* ───────────── 데스크탑(LM Studio) 단말용: 문서를 통째로 넣는 프롬프트 ───────────── */
+
+export interface ChatTurn {
+  q: string;
+  a: string;
+}
+
+let fullSystemCache: string | null = null;
+
+/**
+ * 큰 문맥을 쓸 수 있는 모델용 시스템 프롬프트. 페르소나·규칙 + 포스터 사실 전부 + 원자료 JSON
+ * + 장면 대본 + 모범 답변을 모두 넣는다. 항상 같은 문자열이라 서버의 프롬프트 캐시가 그대로 먹힌다.
+ */
+export function fullSystemPrompt(): string {
+  if (fullSystemCache) return fullSystemCache;
+  const digest = Object.values(llmContext.facts_digest)
+    .map((t) => `- ${t}`)
+    .join('\n');
+  const scripts = sceneScripts.map((s) => `(${s.chip}) ${s.lines.join(' ')}`).join('\n');
+  const examples = qa.entries.map((e) => `- ${e.reply}`).join('\n');
+  fullSystemCache = [
+    llmContext.system_prompt,
+    `[포스터 사실]\n${digest}`,
+    `[포스터 원자료 JSON — 위 요약과 같은 내용의 원본. 숫자는 여기 있는 값만 쓴다]\n${JSON.stringify(posterFacts)}`,
+    `[장면별 설명 대본 — 말투와 눈높이는 이것을 따라 한다]\n${scripts}`,
+    `[모범 답변 — 비슷한 질문에는 이 내용과 어긋나지 않게 답한다]\n${examples}`,
+  ].join('\n\n');
+  return fullSystemCache;
+}
+
+/** OpenAI 호환 chat 메시지 배열. 직전 대화 몇 턴을 같이 넣어 "더 자세히" 같은 후속 질문을 받는다. */
+export function buildFullPrompt(message: string, topic: TopicId = 'general', history: readonly ChatTurn[] = []) {
+  const route = routeTopic(message, topic);
+  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [{ role: 'system', content: fullSystemPrompt() }];
+  for (const t of history) {
+    messages.push({ role: 'user', content: t.q });
+    messages.push({ role: 'assistant', content: t.a });
+  }
+  messages.push({ role: 'user', content: message });
+  return { messages, route, factIds: (route ? route.factIds : []) as FactId[] };
+}
+
+function numbersIn(s: string): string[] {
+  return (
+    s
+      .replace(/[−‒–—]/g, '-')
+      .replace(/(\d),(?=\d{3})/g, '$1')
+      .match(/\d+(?:\.\d+)?/g) ?? []
+  );
+}
+
+/**
+ * 답변에 나온 숫자 가운데 문맥(포스터 자료 + 질문)에 없는 것을 돌려준다. 비어 있으면 통과.
+ * 10 이하의 정수는 "2가지", "1학년" 같은 일상 표현이라 허용한다.
+ */
+export function findUnknownNumbers(reply: string, question = ''): string[] {
+  const allowed = new Set(numbersIn(fullSystemPrompt() + ' ' + question));
+  return numbersIn(reply).filter((n) => !allowed.has(n) && !(Number.isInteger(Number(n)) && Number(n) <= 10));
+}

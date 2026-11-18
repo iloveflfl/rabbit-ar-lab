@@ -123,7 +123,7 @@ export class ChatPanel {
         meta.append(
           h('span', {
             class: `badge ${a.engine}`,
-            text: a.engine === 'geniex' ? '전시자 폰의 온디바이스 AI' : a.engine === 'mock' ? 'MOCK · 개발용 가짜 서버' : '미리 준비한 답변',
+            text: a.engine === 'geniex' ? '전시자 폰의 온디바이스 AI' : a.engine === 'lmstudio' ? '전시자 PC의 로컬 AI' : a.engine === 'mock' ? 'MOCK · 개발용 가짜 서버' : '미리 준비한 답변',
           }),
         );
         if (a.fallbackReason) meta.append(h('span', { class: 'badge', text: REASON[a.fallbackReason] ?? '서버가 답하지 못했어요' }));
