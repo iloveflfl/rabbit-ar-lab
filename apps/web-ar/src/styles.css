@@ -734,3 +734,10 @@ html.xr-active body {
   pointer-events: none;
   white-space: pre;
 }
+
+.pill.switch {
+  padding: 0 11px;
+  font-size: 12.5px;
+  background: rgba(95, 211, 255, 0.22);
+  border-color: rgba(95, 211, 255, 0.55);
+}

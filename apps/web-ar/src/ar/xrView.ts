@@ -94,7 +94,11 @@ export class XrArView {
   private pbo: WebGLBuffer | null = null;
   private pendingRead: { sync: WebGLSync; tag: FrameTag; waiter: (src: FrameSource | null) => void; frames: number } | null = null;
   private readLag = 0;
-  private viewportScale = 0.85;
+  private viewportScale = 1;
+  private readonly dts = new Float32Array(90).fill(33);
+  private dtIndex = 0;
+  /** 막힘이 없을 때의 프레임 간격 (ms). 1000 / nominalMs 가 이 세션의 프레임률 상한이다. */
+  private nominalMs = 33.3;
   private slowFor = 0;
   private fastFor = 0;
   private slowFrames = 0;
@@ -131,7 +135,7 @@ export class XrArView {
       meas: this.measCount,
       world: `n ${this.world.count} keys ${this.world.keyframes} ${this.world.converged ? 'converged' : 'converging'} resets ${this.world.resets}`,
       width: `${(e.width * 100).toFixed(1)}cm`,
-      fps: `${this.fps.toFixed(0)} @x${this.viewportScale.toFixed(2)} slow ${this.slowFrames}/${this.totalFrames}`,
+      fps: `${this.fps.toFixed(0)} (cap ${(1000 / this.nominalMs).toFixed(0)}) @x${this.viewportScale.toFixed(2)} slow ${this.slowFrames}/${this.totalFrames}`,
       read: `async, ${this.readLag.toFixed(1)} frames`,
     };
   }
@@ -251,17 +255,28 @@ export class XrArView {
       }
     }
 
-    // 프레임이 밀리면 그리는 영역을 줄이고, 여유가 생기면 천천히 되돌린다.
+    // 이 기기의 AR 세션이 낼 수 있는 프레임률(상한)을 잰다.
+    // Android 의 WebXR AR 은 ARCore 카메라 프레임에 맞춰 돌기 때문에 보통 초당 30 이 상한이다.
+    // 상한을 60 으로 가정하면 "항상 느리다"고 오판해서 해상도만 깎게 된다(실제로 그랬다).
+    if (dt > 0.002) {
+      this.dts[this.dtIndex++ % this.dts.length] = dt * 1000;
+      if (this.dtIndex % 45 === 0 && this.dtIndex >= this.dts.length) {
+        const sorted = Array.from(this.dts).sort((a, b) => a - b);
+        this.nominalMs = sorted[Math.floor(sorted.length * 0.2)]; // 빠른 쪽 20% 지점 = 막힘 없을 때의 간격
+      }
+    }
+    const cap = 1000 / this.nominalMs;
     this.totalFrames++;
-    if (dt * 1000 > 25) this.slowFrames++;
-    if (this.state === 'tracking' && now - this.startedAt > 8000) {
-      this.slowFor = this.fps < 50 ? this.slowFor + dt : 0;
-      this.fastFor = this.fps > 57 ? this.fastFor + dt : 0;
-      if (this.slowFor > 1.2 && this.viewportScale > 0.55) {
-        this.viewportScale = Math.max(0.55, this.viewportScale - 0.1);
+    if (dt * 1000 > this.nominalMs * 1.6) this.slowFrames++;
+    // 상한에 못 미칠 때만 그리는 영역을 줄이고, 상한에 닿아 있으면 되돌린다.
+    if (this.state === 'tracking' && now - this.startedAt > 8000 && this.dtIndex >= this.dts.length) {
+      this.slowFor = this.fps < cap * 0.85 ? this.slowFor + dt : 0;
+      this.fastFor = this.fps > cap * 0.94 ? this.fastFor + dt : 0;
+      if (this.slowFor > 1.5 && this.viewportScale > 0.6) {
+        this.viewportScale = Math.max(0.6, this.viewportScale - 0.1);
         this.slowFor = 0;
-      } else if (this.fastFor > 8 && this.viewportScale < 1) {
-        this.viewportScale = Math.min(1, this.viewportScale + 0.05);
+      } else if (this.fastFor > 3 && this.viewportScale < 1) {
+        this.viewportScale = Math.min(1, this.viewportScale + 0.1);
         this.fastFor = 0;
       }
     }
@@ -458,7 +473,7 @@ export class XrArView {
       // 크기·거리까지 수렴하기 전, 또는 폰이 움직이는 중에는 촘촘히 관측해 바로잡는다(초당 20번).
       // 수렴했고 가만히 있을 때만 느슨하게(초당 7번).
       // 화면이 밀리고 있으면 한 단계 더 느슨하게 한다(추적 스레드도 같은 GPU 를 쓴다).
-      intervalMs: () => (this.world.converged && this.camSpeed < 0.08 ? 150 : 50) * (this.fps > 0 && this.fps < 48 ? 1.6 : 1),
+      intervalMs: () => (this.world.converged && this.camSpeed < 0.08 ? 150 : 50) * (this.fps > 0 && this.fps < (1000 / this.nominalMs) * 0.8 ? 1.6 : 1),
       predict: (tag, outP, outQ) => {
         if (!this.world.locked || !tag.camPos || !tag.camQuat) return false;
         const e = this.world.estimate;

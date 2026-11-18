@@ -3,7 +3,7 @@ import './styles.css';
 import type { HighlightId, TopicId } from '@rabbit/shared';
 import { sceneScripts, scenes } from '@rabbit/content';
 import { DeviceOrientationSource } from './ar/sensors';
-import { CameraError, type TrackState, rememberXr, xrKnownBad, xrSupported } from './ar/support';
+import { CameraError, type TrackState, preferredArMode, rememberArMode, rememberXr, xrKnownBad, xrSupported } from './ar/support';
 import type { ArView } from './ar/tracker';
 import { ViewerView } from './ar/viewer';
 import { ChatController } from './chat/chatController';
@@ -111,7 +111,7 @@ interface Session {
 }
 let session: Session | null = null;
 
-function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
+function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: { label: string; title: string; onClick: () => void }) {
   const debugBox = params.get('debug') ? h('pre', { class: 'debug-box' }) : null;
   cancelAnimationFrame(landingRaf);
   const stage = new LabStage(detectQuality());
@@ -201,7 +201,14 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
     { id: 'xp', class: mode },
     view,
     scan,
-    h('header', { class: 'hud' }, exit, statusPill, mode === 'ar' ? toggle : h('span', { style: 'width:40px' })),
+    h(
+      'header',
+      { class: 'hud' },
+      exit,
+      statusPill,
+      switcher ? h('button', { class: 'pill switch', type: 'button', title: switcher.title, 'aria-label': switcher.title, text: switcher.label, onclick: switcher.onClick }) : null,
+      mode === 'ar' ? toggle : h('span', { style: 'width:40px' }),
+    ),
     simulated ? h('div', { class: 'sim-badge', text: '모의 카메라 (개발용) — 실기기 검증 아님' }) : null,
     debugBox,
     bottom,
@@ -260,10 +267,21 @@ async function startAr(kind: ArKind): Promise<void> {
 
   // 1순위: WebXR(ARCore) 세계 추적. 지원하지 않거나 시작에 실패하면 카메라 영상 경로로 내려간다.
   //   ?xr=0 이면 건너뛰고, ?xr=1 이면 예전에 실패했던 기기에서도 다시 시도한다.
-  const wantXr = kind === 'device' && params.get('xr') !== '0' && (params.get('xr') === '1' || !xrKnownBad());
+  //   화면의 전환 버튼으로 고른 방식(rabbit.arMode)이 있으면 그것을 따른다.
+  const pref = preferredArMode();
+  const wantXr = kind === 'device' && params.get('xr') !== '0' && (params.get('xr') === '1' || (pref !== 'video' && !xrKnownBad()));
   if (wantXr && (await xrSupported())) {
     const [, { XrArView }] = await loadAr();
-    const ui = buildExperience('ar', false);
+    const ui = buildExperience('ar', false, {
+      label: '60fps',
+      title: '부드럽게 보기로 전환 (카메라 영상 + 자이로, 최대 60fps)',
+      onClick: () => {
+        rememberArMode('video');
+        session?.stop();
+        session = null;
+        void startVideoAr(kind, motion);
+      },
+    });
     ui.root.classList.add('xr');
     const xr = new XrArView(ui.stage, {
       onState: (s) => ui.setStatus(s),
@@ -302,7 +320,23 @@ async function startAr(kind: ArKind): Promise<void> {
 /** 카메라 영상 경로 (WebXR 이 없는 기기, 또는 WebXR 이 실패했을 때). */
 async function startVideoAr(kind: ArKind, motion: Promise<boolean>): Promise<void> {
   const [{ ArView }] = await loadAr();
-  const ui = buildExperience('ar', kind !== 'device');
+  // 공간 고정(WebXR)을 쓸 수 있는 기기에서는 그쪽으로 돌아가는 버튼을 보여 준다.
+  const canXr = kind === 'device' && params.get('xr') !== '0' && (await xrSupported());
+  const ui = buildExperience(
+    'ar',
+    kind !== 'device',
+    canXr
+      ? {
+          label: '고정',
+          title: '공간 고정 보기로 전환 (ARCore, 더 안정적이지만 보통 30fps)',
+          onClick: () => {
+            rememberArMode('xr');
+            rememberXr('ok');
+            void startAr('device');
+          },
+        }
+      : undefined,
+  );
   const ar = new ArView(ui.view, ui.stage, {
     onState: (s) => ui.setStatus(s),
     onTap: (p) => p && ui.stage.selectPanel(p),

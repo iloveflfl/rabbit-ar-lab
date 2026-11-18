@@ -19,6 +19,24 @@ export async function xrSupported(): Promise<boolean> {
   }
 }
 
+/** 사용자가 고른 AR 방식. 'xr' = 공간 고정(ARCore, 보통 30fps), 'video' = 부드럽게(카메라 영상+자이로, 최대 60fps). */
+export type ArMode = 'xr' | 'video';
+export function preferredArMode(): ArMode | null {
+  try {
+    const v = localStorage.getItem('rabbit.arMode');
+    return v === 'xr' || v === 'video' ? v : null;
+  } catch {
+    return null;
+  }
+}
+export function rememberArMode(m: ArMode): void {
+  try {
+    localStorage.setItem('rabbit.arMode', m);
+  } catch {
+    /* 저장 못 해도 된다 */
+  }
+}
+
 /** 이 기기에서 WebXR 경로가 통했는지 기억해 둔다 (다음에 헛걸음하지 않도록). */
 export function rememberXr(v: 'ok' | 'bad'): void {
   try {
