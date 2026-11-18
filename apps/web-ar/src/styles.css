@@ -715,3 +715,26 @@ button {
     animation: none;
   }
 }
+
+/* WebXR(dom-overlay): 카메라 영상은 브라우저가 뒤에 그려 주므로 배경을 비운다 */
+#xp.xr {
+  background: transparent;
+}
+html.xr-active,
+html.xr-active body {
+  background: transparent;
+}
+.debug-box {
+  position: absolute;
+  z-index: 7;
+  top: calc(96px + var(--safe-t));
+  left: 8px;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #9dffb0;
+  font: 10.5px/1.45 ui-monospace, Menlo, Consolas, monospace;
+  pointer-events: none;
+  white-space: pre;
+}

@@ -517,6 +517,17 @@ export class LabStage {
   pick(ndc: THREE.Vector2, camera: THREE.Camera): HighlightId | null {
     if (!this.revealed || this.mode !== 'rabbit') return null;
     this.raycaster.setFromCamera(ndc, camera);
+    return this.hitPanel();
+  }
+
+  /** 세계 좌표의 광선으로 패널을 고른다 (WebXR 의 화면 탭). */
+  pickRay(origin: THREE.Vector3, direction: THREE.Vector3): HighlightId | null {
+    if (!this.revealed || this.mode !== 'rabbit') return null;
+    this.raycaster.set(origin, direction);
+    return this.hitPanel();
+  }
+
+  private hitPanel(): HighlightId | null {
     const hit = this.raycaster.intersectObject(this.posterMesh, false)[0];
     if (!hit) return null;
     const local = this.tmpV.copy(hit.point).applyMatrix4(this.tmpM.copy(this.root.matrixWorld).invert());

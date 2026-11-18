@@ -35,7 +35,9 @@ npm run dev
 |---|---|
 | `/` | 랜딩 |
 | `/?mode=viewer` | 2D 보기로 바로 |
-| `/?mode=sim` | 모의 카메라 AR (개발 서버에서만) |
+| `/?mode=sim` | 모의 카메라 AR: 영상 + 가짜 자이로 경로 (개발 서버에서만) |
+| `/?mode=simworld` | 모의 카메라 AR: 세계 고정 추정기 시험 (WebXR 경로의 핵심, 개발 서버에서만) |
+| `/?debug=1` | 추적 진단 상자 (배포본에서도 동작). `gyro=0` `cal=0` `lat=80` `xr=0` 과 함께 쓸 수 있다 |
 | `/?relay=http://127.0.0.1:8787` | 릴레이 주소 덮어쓰기 (개발 서버에서만) |
 | `/?q=low` | 저사양 모드 강제 |
 | `/tools/compile-target.html` | 이미지 타깃 컴파일 |
@@ -52,6 +54,9 @@ __rabbit.ar.trackState                     // 'searching' | 'tracking' | 'lost'
 __rabbit.ar.simCamera.covered = true       // (모의) 포스터 가리기 → 추적 상실 시험
 __rabbit.ar.simCamera.qrSticker = true     // (모의) QR 스티커 붙이기
 await __rabbit.snap('name')                // 영상+AR 합성 화면을 apps/web-ar/.devshots/name.png 로 저장
+await __rabbit.measure(3)                  // (모의) 3초 동안 꼭짓점 오차·떨림 측정
+__rabbit.ar.simCamera.shake = 3            // (모의) 손떨림 3배
+__rabbit.ar.simCamera.posterScale = 0.5    // (모의) 절반 크기로 인쇄한 포스터
 ```
 
 ## Android

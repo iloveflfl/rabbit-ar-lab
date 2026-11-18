@@ -2,7 +2,9 @@ import '@fontsource/jua';
 import './styles.css';
 import type { HighlightId, TopicId } from '@rabbit/shared';
 import { sceneScripts, scenes } from '@rabbit/content';
-import { ArView, CameraError, type TrackState } from './ar/tracker';
+import { DeviceOrientationSource } from './ar/sensors';
+import { CameraError, type TrackState, rememberXr, xrKnownBad, xrSupported } from './ar/support';
+import type { ArView } from './ar/tracker';
 import { ViewerView } from './ar/viewer';
 import { ChatController } from './chat/chatController';
 import { RabbitCanvas } from './rabbit/rabbitSprite';
@@ -18,6 +20,10 @@ const app = document.getElementById('app')!;
 const relayUrl: string | null = (DEV && params.get('relay')) || import.meta.env.VITE_RELAY_URL || null;
 const chat = new ChatController(relayUrl);
 chat.connect();
+
+/** 추적 엔진은 용량이 커서 따로 내려받는다. 랜딩이 뜨면 미리 받아 두어 버튼을 누른 뒤 기다리지 않게 한다. */
+let arModules: Promise<[typeof import('./ar/tracker'), typeof import('./ar/xrView')]> | null = null;
+const loadAr = () => (arModules ??= Promise.all([import('./ar/tracker'), import('./ar/xrView')]));
 
 function detectQuality(): Quality {
   const nav = navigator as Navigator & { deviceMemory?: number };
@@ -62,7 +68,7 @@ function showLanding(error?: string): void {
   renderStatus();
   chat.onStatus = renderStatus;
 
-  const arBtn = h('button', { class: 'btn btn-primary', type: 'button', text: 'AR 시작하기', onclick: () => void startAr(false) });
+  const arBtn = h('button', { class: 'btn btn-primary', type: 'button', text: 'AR 시작하기', onclick: () => void startAr('device') });
   const insecure = !window.isSecureContext;
   const landing = h(
     'section',
@@ -77,7 +83,7 @@ function showLanding(error?: string): void {
       error ? h('div', { class: 'land-error', role: 'alert', text: error }) : null,
       arBtn,
       h('button', { class: 'btn btn-ghost', type: 'button', text: 'AR 없이 2D로 보기', onclick: () => void startViewer() }),
-      DEV ? h('button', { class: 'btn btn-ghost', type: 'button', text: '[개발] 모의 카메라로 AR 시험', onclick: () => void startAr(true) }) : null,
+      DEV ? h('button', { class: 'btn btn-ghost', type: 'button', text: '[개발] 모의 카메라로 AR 시험', onclick: () => void startAr('sim') }) : null,
       h(
         'ul',
         { class: 'steps' },
@@ -94,6 +100,7 @@ function showLanding(error?: string): void {
   );
   if (insecure) arBtn.setAttribute('disabled', '');
   app.replaceChildren(landing);
+  window.setTimeout(() => void loadAr().catch(() => (arModules = null)), 400);
 }
 
 /* ───────────────────────── 체험 화면 ───────────────────────── */
@@ -105,6 +112,7 @@ interface Session {
 let session: Session | null = null;
 
 function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
+  const debugBox = params.get('debug') ? h('pre', { class: 'debug-box' }) : null;
   cancelAnimationFrame(landingRaf);
   const stage = new LabStage(detectQuality());
   const view = h('div', { id: 'view' });
@@ -195,6 +203,7 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
     scan,
     h('header', { class: 'hud' }, exit, statusPill, mode === 'ar' ? toggle : h('span', { style: 'width:40px' })),
     simulated ? h('div', { class: 'sim-badge', text: '모의 카메라 (개발용) — 실기기 검증 아님' }) : null,
+    debugBox,
     bottom,
   );
   app.replaceChildren(root);
@@ -222,7 +231,7 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
     () => vv?.removeEventListener('resize', onViewport),
     () => vv?.removeEventListener('scroll', onViewport),
   ];
-  return { stage, view, bottom, setStatus, cleanup };
+  return { stage, view, bottom, root, setStatus, cleanup, debugBox };
 }
 
 function leave(): void {
@@ -231,23 +240,92 @@ function leave(): void {
   showLanding();
 }
 
-async function startAr(simulate: boolean): Promise<void> {
+type ArKind = 'device' | 'sim' | 'simworld';
+
+/** 진단 상자(?debug=1)를 주기적으로 채운다. */
+function runDebug(box: HTMLElement | null, read: () => Record<string, string | number>): () => void {
+  if (!box) return () => {};
+  const id = window.setInterval(() => {
+    box.textContent = Object.entries(read())
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(String.fromCharCode(10));
+  }, 250);
+  return () => clearInterval(id);
+}
+
+async function startAr(kind: ArKind): Promise<void> {
   session?.stop();
-  const ui = buildExperience('ar', simulate);
+  // iOS 는 방향 센서 권한을 "탭한 직후"에만 물을 수 있다. 다른 await 보다 먼저 부른다.
+  const motion = kind === 'device' && params.get('gyro') !== '0' ? DeviceOrientationSource.requestPermission() : Promise.resolve(false);
+
+  // 1순위: WebXR(ARCore) 세계 추적. 지원하지 않거나 시작에 실패하면 카메라 영상 경로로 내려간다.
+  //   ?xr=0 이면 건너뛰고, ?xr=1 이면 예전에 실패했던 기기에서도 다시 시도한다.
+  const wantXr = kind === 'device' && params.get('xr') !== '0' && (params.get('xr') === '1' || !xrKnownBad());
+  if (wantXr && (await xrSupported())) {
+    const [, { XrArView }] = await loadAr();
+    const ui = buildExperience('ar', false);
+    ui.root.classList.add('xr');
+    const xr = new XrArView(ui.stage, {
+      onState: (s) => ui.setStatus(s),
+      onTap: (p) => p && ui.stage.selectPanel(p),
+      onEnd: () => leave(),
+      onGiveUp: (reason) => {
+        console.warn('WebXR 경로 포기:', reason);
+        rememberXr('bad');
+        session?.stop();
+        session = null;
+        void startVideoAr(kind, motion);
+      },
+    });
+    const stopDebug = runDebug(ui.debugBox, () => xr.debug);
+    session = {
+      stage: ui.stage,
+      stop: () => {
+        stopDebug();
+        ui.cleanup.forEach((f) => f());
+        xr.stop();
+        ui.stage.dispose();
+      },
+    };
+    try {
+      await xr.start(ui.root);
+      return;
+    } catch (e) {
+      console.warn('WebXR 경로를 쓸 수 없어 카메라 영상 경로로 전환합니다:', e);
+      session.stop();
+      session = null;
+    }
+  }
+  await startVideoAr(kind, motion);
+}
+
+/** 카메라 영상 경로 (WebXR 이 없는 기기, 또는 WebXR 이 실패했을 때). */
+async function startVideoAr(kind: ArKind, motion: Promise<boolean>): Promise<void> {
+  const [{ ArView }] = await loadAr();
+  const ui = buildExperience('ar', kind !== 'device');
   const ar = new ArView(ui.view, ui.stage, {
     onState: (s) => ui.setStatus(s),
     onTap: (p) => p && ui.stage.selectPanel(p),
   });
+  const stopDebug = runDebug(ui.debugBox, () => ar.debug);
   session = {
     stage: ui.stage,
     stop: () => {
+      stopDebug();
       ui.cleanup.forEach((f) => f());
       ar.stop();
       ui.stage.dispose();
     },
   };
   try {
-    await ar.start({ simulate });
+    const granted = await motion;
+    await ar.start({
+      simulate: kind !== 'device',
+      simWorld: kind === 'simworld',
+      noGyro: params.get('gyro') === '0' || (kind === 'device' && !granted),
+      noCalibration: params.get('cal') === '0',
+      latencyMs: params.get('lat') ? Number(params.get('lat')) : undefined,
+    });
     if (DEV) exposeDebug(ui.stage, ar, null);
   } catch (e) {
     console.error(e);
@@ -308,12 +386,48 @@ function exposeDebug(stage: LabStage, ar: ArView | null, viewer: ViewerView | nu
     const res = await fetch(`/__dev/save?name=${name}.png`, { method: 'POST', body: blob });
     return res.text();
   };
-  (window as unknown as { __rabbit: unknown }).__rabbit = { stage, ar, viewer, chat, snap, scenes };
+  /**
+   * 모의 카메라에서 정합 오차와 떨림을 잰다 (영상 픽셀, 720×1280 기준).
+   *   error  = 네 꼭짓점 오차 크기의 평균
+   *   jitter = 꼭짓점 오차가 시간에 따라 흔들리는 정도 (표준편차) — "부들부들"의 크기
+   * 화면의 영상이 실제보다 얼마나 늦는지 모르므로 여러 지연값으로 비교해 가장 잘 맞는 것을 고른다.
+   */
+  const measure = async (seconds = 3) => {
+    if (!ar) return null;
+    const lags = [0, 17, 33, 50, 67, 83, 100, 117];
+    const samples: number[][][] = lags.map(() => []);
+    const until = performance.now() + seconds * 1000;
+    while (performance.now() < until) {
+      await new Promise((r) => requestAnimationFrame(r));
+      lags.forEach((lag, i) => {
+        const e = ar.devCornerError(lag);
+        if (e) samples[i].push(e);
+      });
+    }
+    let best: { lag: number; error: number; jitter: number; n: number } | null = null;
+    lags.forEach((lag, i) => {
+      const s = samples[i];
+      if (s.length < 10) return;
+      const mean = new Array(8).fill(0);
+      for (const e of s) for (let k = 0; k < 8; k++) mean[k] += e[k] / s.length;
+      let err = 0;
+      let jit = 0;
+      for (const e of s)
+        for (let c = 0; c < 4; c++) {
+          err += Math.hypot(e[c * 2], e[c * 2 + 1]);
+          jit += (e[c * 2] - mean[c * 2]) ** 2 + (e[c * 2 + 1] - mean[c * 2 + 1]) ** 2;
+        }
+      const r = { lag, error: +(err / (s.length * 4)).toFixed(2), jitter: +Math.sqrt(jit / (s.length * 4)).toFixed(2), n: s.length };
+      if (!best || r.jitter < best.jitter) best = r;
+    });
+    return best;
+  };
+  (window as unknown as { __rabbit: unknown }).__rabbit = { stage, ar, viewer, chat, snap, scenes, measure };
 }
 
 /* ───────────────────────── 시작 ───────────────────────── */
 
 const want = params.get('mode');
 if (want === 'viewer') void startViewer();
-else if (DEV && want === 'sim') void startAr(true);
+else if (DEV && (want === 'sim' || want === 'simworld')) void startAr(want);
 else showLanding();
