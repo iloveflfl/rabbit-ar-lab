@@ -21,7 +21,7 @@
     "ask": "tsx scripts/ask-relay.ts",
     "test": "vitest run",
     "test:e2e": "tsx scripts/e2e-relay.ts",
-    "typecheck": "tsc -p packages/shared && tsc -p packages/educational-content && tsc -p apps/relay-worker && tsc -p apps/web-ar",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/educational-content && tsc -p apps/relay-worker && tsc -p apps/web-ar && tsc -p scripts",
     "validate:facts": "tsx scripts/validate-facts.ts",
     "export:rabbit": "tsx scripts/export-rabbit-sheets.ts",
     "make:qr": "tsx scripts/make-qr.ts"

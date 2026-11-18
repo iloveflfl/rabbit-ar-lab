@@ -2,10 +2,20 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 title Rabbit AR Server (LM Studio)
-echo [1/3] LM Studio server
-call lms server start
-echo [2/3] Model
-lms ps | findstr /i "gemma-4-26b-a4b-it-uncensored" >nul || call lms load gemma-4-26b-a4b-it-uncensored --context-length 16384 --gpu max -y
-echo [3/3] Relay
-call npm run desktop-device
+where node >nul 2>nul || (echo [ERROR] Node.js not found. Install Node.js first. & pause & exit /b 1)
+where lms >nul 2>nul || echo [WARN] lms command not found. Open LM Studio once and enable its command line tool.
+if not exist desktop-server.env (echo [ERROR] desktop-server.env not found. Copy desktop-server.env.example and fill it in. & pause & exit /b 1)
+if not exist node_modules (echo Installing packages... & call npm install)
+:loop
+call npx tsx scripts/desktop-device.ts
+set CODE=%errorlevel%
+if "%CODE%"=="0" goto done
+if "%CODE%"=="2" goto done
+echo.
+echo [RESTART] Server exited unexpectedly (code %CODE%). Restarting in 5 seconds... Close this window to stop.
+timeout /t 5 /nobreak >nul
+goto loop
+:done
+echo.
+echo Server stopped (code %CODE%).
 pause

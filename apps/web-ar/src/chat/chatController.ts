@@ -36,6 +36,8 @@ interface Pending {
   text: string;
   h: AskHandlers;
   timer: ReturnType<typeof setTimeout>;
+  /** 서버가 아무 소식도 없이 멈춘 것을 잡는 타이머 */
+  stall: ReturnType<typeof setTimeout> | null;
   done: boolean;
 }
 
@@ -148,12 +150,51 @@ export class ChatController {
       while (!p.done && !this.ready() && Date.now() - t0 < 6000) await sleep(150);
     }
     if (p.done) return;
-    if (!this.ready()) return void this.fallback(p, 'offline');
     p.requestId = newUuid(); // 다시 보낼 때는 새 번호 (릴레이가 같은 번호를 거절한다)
     p.text = '';
     const frame: Record<string, unknown> = { type: 'chat.request', requestId: p.requestId, sessionId: this.sessionId, topic: p.topic, message: p.message, clientVersion: CLIENT_VERSION };
     if (p.selectedGraphId) frame.selectedGraphId = p.selectedGraphId;
-    this.ws!.send(JSON.stringify(frame));
+    if (!this.ready()) {
+      // 웹소켓을 막는 네트워크(일부 공용 Wi-Fi)일 수 있다. 일반 HTTP 요청으로 한 번 물어본다.
+      const wsDown = !this.ws || this.ws.readyState !== WebSocket.OPEN;
+      if (wsDown && (await this.askHttp(p, frame))) return;
+      if (!p.done) void this.fallback(p, 'offline');
+      return;
+    }
+    try {
+      this.ws!.send(JSON.stringify(frame));
+      this.watch(p, 80_000);
+    } catch {
+      void this.retryOrFallback(p, 'device_disconnected');
+    }
+  }
+
+  /** 웹소켓 없이 묻는다 (스트리밍 없이 완성된 답만 받는다). 처리했으면 true. */
+  private async askHttp(p: Pending, frame: Record<string, unknown>): Promise<boolean> {
+    const base = this.relayUrl!.replace(/^ws/, 'http').replace(/\/$/, '');
+    try {
+      const health = (await (await fetch(`${base}/health`, { signal: AbortSignal.timeout(6000) })).json()) as { status?: string };
+      if (health.status !== 'online' && health.status !== 'busy') return false;
+      if (p.done) return true;
+      this.watch(p, LIMITS.requestTimeoutMs + 10_000);
+      // text/plain 으로 보내면 사전 요청(preflight) 없이 바로 간다.
+      const res = await fetch(`${base}/v1/chat`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(frame), signal: AbortSignal.timeout(LIMITS.requestTimeoutMs + 10_000) });
+      const parsed = parseServerMessage(await res.text());
+      if (p.done) return true;
+      if (!parsed.ok) return false;
+      const m = parsed.value;
+      if (m.type === 'chat.final') {
+        this.finish(p, toAnswer(m));
+        return true;
+      }
+      if (m.type === 'chat.error') {
+        void this.fallback(p, m.code);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
   }
 
   /** 연결 문제로 실패했으면 한 번은 조용히 다시 보낸다 (쓰던 답은 새 답으로 덮어쓴다). */
@@ -162,6 +203,8 @@ export class ChatController {
     if (!transient || p.attempts >= 1) return void this.fallback(p, reason);
     p.attempts++;
     p.requestId = ''; // 이전 요청의 늦은 프레임은 버린다
+    if (p.stall) clearTimeout(p.stall);
+    p.stall = null;
     await sleep(1200);
     if (!p.done) await this.dispatch(p);
   }
@@ -178,8 +221,11 @@ export class ChatController {
     switch (m.type) {
       case 'chat.queued':
         p.h.onQueued?.(m.position);
+        // 앞에 줄 선 질문이 있으면 그만큼 더 기다려 준다.
+        this.watch(p, Math.min(LIMITS.requestTimeoutMs, 80_000 + Math.max(0, m.position - 1) * 60_000));
         break;
       case 'chat.delta':
+        this.watch(p, 60_000);
         if (p.text.length < LIMITS.maxReplyChars) {
           p.text += m.text;
           p.h.onDelta(p.text);
@@ -194,10 +240,22 @@ export class ChatController {
     }
   }
 
-  private finish(p: Pending, a: Answer): void {
-    if (p.done) return;
+  /** 일정 시간 동안 이 질문에 대한 소식이 없으면 준비된 답변으로 넘어간다. 소식이 올 때마다 다시 건다. */
+  private watch(p: Pending, ms: number): void {
+    if (p.stall) clearTimeout(p.stall);
+    p.stall = p.done ? null : setTimeout(() => void this.fallback(p, 'timeout'), ms);
+  }
+
+  private settle(p: Pending): void {
     p.done = true;
     clearTimeout(p.timer);
+    if (p.stall) clearTimeout(p.stall);
+    p.stall = null;
+  }
+
+  private finish(p: Pending, a: Answer): void {
+    if (p.done) return;
+    this.settle(p);
     if (this.pending === p) this.pending = null;
     p.h.onFinal(a);
   }
@@ -205,8 +263,7 @@ export class ChatController {
   /** 서버가 답하지 못할 때: 사전제작 답변을 타이핑하듯 보여 준다. */
   private async fallback(p: Pending, reason: Answer['fallbackReason']): Promise<void> {
     if (p.done) return;
-    p.done = true;
-    clearTimeout(p.timer);
+    this.settle(p);
     const a = matchCanned(p.message, p.topic);
     let shown = '';
     for (let i = 0; i < a.reply.length; i += 3) {
@@ -223,7 +280,7 @@ export class ChatController {
     if (this.pending) return false;
     const message = sanitizeText(rawMessage).slice(0, LIMITS.maxMessageChars);
     if (!message) return false;
-    const p: Pending = { requestId: '', message, topic, selectedGraphId, attempts: 0, text: '', h, done: false, timer: setTimeout(() => this.fallback(p, 'timeout'), LIMITS.requestTimeoutMs + 12_000) };
+    const p: Pending = { requestId: '', message, topic, selectedGraphId, attempts: 0, text: '', h, done: false, stall: null, timer: setTimeout(() => this.fallback(p, 'timeout'), LIMITS.requestTimeoutMs + 12_000) };
     this.pending = p;
     if (!this.relayUrl) void sleep(350).then(() => this.fallback(p, 'unconfigured'));
     else void this.dispatch(p);
@@ -233,8 +290,7 @@ export class ChatController {
   cancel(): void {
     const p = this.pending;
     if (!p || p.done) return;
-    p.done = true;
-    clearTimeout(p.timer);
+    this.settle(p);
     this.pending = null;
     if (p.requestId && this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: 'cancel', requestId: p.requestId, sessionId: this.sessionId }));
   }

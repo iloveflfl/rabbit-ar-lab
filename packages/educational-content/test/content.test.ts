@@ -171,6 +171,8 @@ describe('큰 모델 출력 정리', () => {
     expect(parseDesktopOutput(raw, SCENE_ACTIONS)).toEqual({ reply: '칠러는 설정값이야.\n\n시편은 73°C까지 올라갔어!', animation: 'show_heating' });
     expect(stripThinking('<생각>아직 쓰는 중')).toBe('');
     expect(stripThinking('<생')).toBe('');
+    // 닫는 태그를 빼먹은 경우: 첫 빈 줄까지만 메모로 본다
+    expect(stripThinking('<생각>\n의도: 이유\n사실: 3분\n\n쉬는 동안 열이 빠져서야!\n\n#동작: show_cooling')).toBe('쉬는 동안 열이 빠져서야!\n\n#동작: show_cooling');
     expect(stripThinking('안녕 <생각>a</생각>반가워')).toBe('안녕 반가워');
   });
 

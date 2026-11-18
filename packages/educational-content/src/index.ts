@@ -267,14 +267,25 @@ export function filterInventedMeasurements(reply: string, question = ''): { repl
 const THINK_OPEN = '<생각>';
 const THINK_CLOSE = '</생각>';
 
-/** 모델 출력에서 숨은 메모(<생각>…</생각>)를 뺀다. 아직 닫히지 않았으면 메모가 시작된 곳부터 전부 뺀다. */
+/**
+ * 모델 출력에서 숨은 메모(<생각>…</생각>)를 뺀다.
+ * 모델이 닫는 태그를 빼먹고 빈 줄 뒤에 바로 답을 쓰는 일이 있다(실측). 그때는 첫 빈 줄까지를 메모로 본다.
+ * 닫히지도 않고 빈 줄도 아직 없으면(쓰는 중) 메모가 시작된 곳부터 전부 뺀다.
+ */
 export function stripThinking(raw: string): string {
   let s = raw;
   for (;;) {
     const a = s.indexOf(THINK_OPEN);
     if (a < 0) break;
     const b = s.indexOf(THINK_CLOSE, a);
-    s = b < 0 ? s.slice(0, a) : s.slice(0, a) + s.slice(b + THINK_CLOSE.length);
+    if (b >= 0) {
+      s = s.slice(0, a) + s.slice(b + THINK_CLOSE.length);
+      continue;
+    }
+    const rest = s.slice(a + THINK_OPEN.length);
+    const gap = /\n[ \t]*\n/.exec(rest);
+    s = s.slice(0, a) + (gap ? rest.slice(gap.index + gap[0].length) : '');
+    break;
   }
   // 스트리밍 중에 '<생' 처럼 태그가 반쯤 온 경우도 가린다.
   for (let n = THINK_OPEN.length - 1; n > 0; n--) {

@@ -22,7 +22,39 @@ chat.connect();
 
 /** 추적 엔진은 용량이 커서 따로 내려받는다. 랜딩이 뜨면 미리 받아 두어 버튼을 누른 뒤 기다리지 않게 한다. */
 let arModules: Promise<[typeof import('./ar/tracker'), typeof import('./ar/xrView')]> | null = null;
-const loadAr = () => (arModules ??= Promise.all([import('./ar/tracker'), import('./ar/xrView')]));
+const loadAr = () =>
+  (arModules ??= Promise.all([import('./ar/tracker'), import('./ar/xrView')]).catch((e) => {
+    arModules = null; // 다음에 다시 시도할 수 있게
+    throw e;
+  }));
+
+/**
+ * 화면을 여는 동작을 감싼다. 어떤 예외가 나도 빈 화면에 갇히지 않고 첫 화면으로 돌아와 안내한다.
+ * 새 버전이 배포된 직후에는 옛 페이지가 없어진 파일을 찾다 실패할 수 있다. 그때는 한 번 새로고침한다.
+ */
+async function guarded(run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+  } catch (e) {
+    console.error(e);
+    try {
+      session?.stop();
+    } catch {
+      /* 정리 중 오류는 무시 */
+    }
+    session = null;
+    const chunk = /dynamically imported module|Importing a module script failed|Failed to fetch/i.test(String(e));
+    let reloaded = true;
+    try {
+      reloaded = sessionStorage.getItem('rabbit.reloaded') === '1';
+      if (chunk && !reloaded) sessionStorage.setItem('rabbit.reloaded', '1');
+    } catch {
+      /* 저장소를 못 쓰면 새로고침하지 않는다 */
+    }
+    if (chunk && !reloaded) return location.reload();
+    showLanding(chunk ? '필요한 파일을 불러오지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.' : '화면을 여는 중 문제가 생겼어요. 다시 눌러 주세요.');
+  }
+}
 
 function detectQuality(): Quality {
   const nav = navigator as Navigator & { deviceMemory?: number };
@@ -67,7 +99,7 @@ function showLanding(error?: string): void {
   renderStatus();
   chat.onStatus = renderStatus;
 
-  const arBtn = h('button', { class: 'btn btn-primary', type: 'button', text: 'AR 시작하기', onclick: () => void startAr('device') });
+  const arBtn = h('button', { class: 'btn btn-primary', type: 'button', text: 'AR 시작하기', onclick: () => void guarded(() => startAr('device')) });
   const insecure = !window.isSecureContext;
   const landing = h(
     'section',
@@ -81,8 +113,8 @@ function showLanding(error?: string): void {
       h('p', { class: 'lead', text: '벽에 걸린 학술 포스터를 비추면, 토끼 선생님이 나타나 극저온 식각 실험을 쉽게 알려 줘요.' }),
       error ? h('div', { class: 'land-error', role: 'alert', text: error }) : null,
       arBtn,
-      h('button', { class: 'btn btn-ghost', type: 'button', text: 'AR 없이 2D로 보기', onclick: () => void startViewer() }),
-      DEV ? h('button', { class: 'btn btn-ghost', type: 'button', text: '[개발] 모의 카메라로 AR 시험', onclick: () => void startAr('sim') }) : null,
+      h('button', { class: 'btn btn-ghost', type: 'button', text: 'AR 없이 2D로 보기', onclick: () => void guarded(() => startViewer()) }),
+      DEV ? h('button', { class: 'btn btn-ghost', type: 'button', text: '[개발] 모의 카메라로 AR 시험', onclick: () => void guarded(() => startAr('sim')) }) : null,
       h(
         'ul',
         { class: 'steps' },
@@ -495,6 +527,24 @@ function exposeDebug(stage: LabStage, ar: ArView | null, viewer: ViewerView | nu
 /* ───────────────────────── 시작 ───────────────────────── */
 
 const want = params.get('mode');
-if (want === 'viewer') void startViewer();
-else if (DEV && (want === 'sim' || want === 'simworld')) void startAr(want);
+if (want === 'viewer') void guarded(() => startViewer());
+else if (DEV && (want === 'sim' || want === 'simworld')) void guarded(() => startAr(want));
 else showLanding();
+
+// 그래픽 장치를 잃으면(메모리 부족, 탭 전환 등) 화면이 멈춘 채 남는다. 첫 화면으로 돌아가 다시 시작하게 한다.
+document.addEventListener(
+  'webglcontextlost',
+  () => {
+    if (!session) return;
+    try {
+      session.stop();
+    } catch {
+      /* 정리 중 오류는 무시 */
+    }
+    session = null;
+    showLanding('화면 그리기가 중단됐어요. 다시 시작해 주세요.');
+  },
+  true,
+);
+// 놓친 예외가 있어도 기록은 남긴다 (화면은 그대로 둔다).
+window.addEventListener('unhandledrejection', (e) => console.error('처리되지 않은 오류:', e.reason));

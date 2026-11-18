@@ -22,3 +22,6 @@ apps/rabbit-server-android/.idea/
 *.bin
 *.safetensors
 *.env
+
+# 토끼 서버 기록
+logs/

@@ -77,8 +77,14 @@ export default {
       return new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { ...JSON_HEADERS, ...corsHeaders(req, env) } });
     }
     // 전시 하나 = 방 하나. 이름이 고정이라 주소도 고정이다.
-    const stub = env.RELAY.get(env.RELAY.idFromName('exhibition'));
-    return stub.fetch(req);
+    try {
+      const stub = env.RELAY.get(env.RELAY.idFromName('exhibition'));
+      return await stub.fetch(req);
+    } catch (e) {
+      // 방(Durable Object)이 재시작 중이거나 과부하일 때. 클라이언트는 이 응답을 보고 다시 시도한다.
+      console.error('relay fetch error', e);
+      return new Response(JSON.stringify({ error: 'relay_unavailable' }), { status: 503, headers: { ...JSON_HEADERS, ...corsHeaders(req, env), 'retry-after': '2' } });
+    }
   },
 } satisfies ExportedHandler<Env>;
 
@@ -220,14 +226,23 @@ export class RelayRoom extends DurableObject<Env> {
       this.conns.delete(ws);
       return;
     }
-    this.core.onMessage(conn.id, message);
+    try {
+      this.core.onMessage(conn.id, message);
+    } catch (e) {
+      // 프레임 하나를 처리하다 난 오류로 방 전체가 멈추면 안 된다. 그 프레임만 버린다.
+      console.error('onMessage error', e);
+    }
   }
 
   override webSocketClose(ws: WebSocket, code: number): void {
     const conn = this.conns.get(ws);
     if (conn) {
-      this.core.detach(conn.id);
       this.conns.delete(ws);
+      try {
+        this.core.detach(conn.id);
+      } catch (e) {
+        console.error('detach error', e);
+      }
     }
     try {
       ws.close(code === 1005 || code === 1006 ? 1000 : code, 'bye');
@@ -239,8 +254,12 @@ export class RelayRoom extends DurableObject<Env> {
   override webSocketError(ws: WebSocket): void {
     const conn = this.conns.get(ws);
     if (conn) {
-      this.core.detach(conn.id);
       this.conns.delete(ws);
+      try {
+        this.core.detach(conn.id);
+      } catch (e) {
+        console.error('detach error', e);
+      }
     }
   }
 }
