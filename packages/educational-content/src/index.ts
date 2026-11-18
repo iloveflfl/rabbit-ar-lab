@@ -11,9 +11,13 @@ export const scenes = scenesJson.scenes;
 export const sceneScripts = scriptsJson.scripts as Array<{
   id: string;
   chip: string;
+  /** 0 시작 · 1 기초 지식 · 2 장비 · 3 결과 */
+  part: 0 | 1 | 2 | 3;
   highlight: HighlightId | null;
   topic: TopicId;
   lines: string[];
+  /** 포스터 측정값이 아닌 일반 지식의 숫자 (있을 때만) */
+  general_numbers?: number[];
 }>;
 export const llmContext = llmJson as {
   system_prompt: string;

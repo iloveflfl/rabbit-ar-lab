@@ -1,15 +1,16 @@
-import '@fontsource/jua';
+import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 import './styles.css';
 import type { HighlightId, TopicId } from '@rabbit/shared';
-import { sceneScripts, scenes } from '@rabbit/content';
+import { posterFacts, sceneScripts, scenes } from '@rabbit/content';
 import { CameraError, type TrackState, xrSupported } from './ar/support';
 import type { ArView } from './ar/tracker';
 import { ViewerView } from './ar/viewer';
 import { ChatController } from './chat/chatController';
-import { RabbitCanvas } from './rabbit/rabbitSprite';
+import { paintPage } from './stage/posterArt';
 import { LabStage, type Quality, type SceneEvent } from './stage/stage';
 import { ChatPanel } from './ui/chatPanel';
 import { h } from './ui/dom';
+import { LandingHero } from './ui/landingHero';
 
 const DEV = import.meta.env.DEV;
 const params = new URLSearchParams(location.search);
@@ -66,68 +67,77 @@ function detectQuality(): Quality {
 
 /* ───────────────────────── 랜딩 ───────────────────────── */
 
-let landingRaf = 0;
+let hero: LandingHero | null = null;
+const closeHero = () => {
+  hero?.dispose();
+  hero = null;
+};
+const PART_LABEL = ['시작', 'PART 1 · 기초', 'PART 2 · 장비', 'PART 3 · 결과'];
 
 function showLanding(error?: string): void {
-  cancelAnimationFrame(landingRaf);
-  const art = new RabbitCanvas(1);
-  art.canvas.className = 'land-rabbit';
-  art.animator.play('rabbit_wave');
-  let last = performance.now();
-  let nextWave = 5;
-  const tick = (now: number) => {
-    landingRaf = requestAnimationFrame(tick);
-    const dt = Math.min(0.1, (now - last) / 1000);
-    last = now;
-    nextWave -= dt;
-    if (nextWave <= 0) {
-      art.animator.play(Math.random() < 0.5 ? 'rabbit_wave' : 'rabbit_cheer');
-      nextWave = 6;
-    }
-    art.draw(dt);
-  };
-  landingRaf = requestAnimationFrame(tick);
+  closeHero();
+  hero = new LandingHero();
+  const f = posterFacts.facts.find((x) => x.id === 'sic_continuous_minus50') as { chiller_setpoint_c: number; sample_final_c: number };
+  const m = posterFacts.metadata;
 
-  const status = h('p', { class: 'land-note' });
+  const status = h('span', { class: 'land-status' });
   const renderStatus = () => {
     const s = chat.linkStatus;
-    status.replaceChildren(
-      h('span', { class: `dot ${s === 'online' ? 'online' : s === 'busy' ? 'busy' : ''}` }),
-      s === 'online' || s === 'busy' ? '토끼 채팅 서버 온라인 — 전시자 폰의 AI가 질문에 답해요' : '토끼 채팅 서버 오프라인 — 미리 준비한 답변으로 체험할 수 있어요',
-    );
+    const on = s === 'online' || s === 'busy';
+    status.replaceChildren(h('span', { class: `dot ${s === 'online' ? 'online' : s === 'busy' ? 'busy' : ''}` }), on ? 'AI 질의응답 온라인' : 'AI 오프라인 · 준비된 답변');
   };
   renderStatus();
   chat.onStatus = renderStatus;
 
-  const arBtn = h('button', { class: 'btn btn-primary', type: 'button', text: 'AR 시작하기', onclick: () => void guarded(() => startAr('device')) });
+  const arBtn = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => void guarded(() => startAr('device')) }, 'AR로 보기', h('span', { class: 'arrow', text: '→' }));
   const insecure = !window.isSecureContext;
+  const sims = scenes.length - 1 - 6; // 그래프·정리 장면을 뺀 원리 시뮬레이션 수
   const landing = h(
     'section',
     { id: 'landing' },
+    h('header', { class: 'land-top' }, h('span', { class: 'brand' }, h('i', {}), '반도체물리학부 학술제'), status),
     h(
       'div',
-      { class: 'land' },
-      h('span', { class: 'land-tag', text: '쉬운 과학 교실' }),
-      art.canvas,
-      h('h1', {}, '토끼 연구실', h('small', { text: '포스터가 살아 움직인다' })),
-      h('p', { class: 'lead', text: '벽에 걸린 학술 포스터를 비추면, 토끼 선생님이 나타나 극저온 식각 실험을 쉽게 알려 줘요.' }),
-      error ? h('div', { class: 'land-error', role: 'alert', text: error }) : null,
-      arBtn,
-      h('button', { class: 'btn btn-ghost', type: 'button', text: 'AR 없이 2D로 보기', onclick: () => void guarded(() => startViewer()) }),
-      DEV ? h('button', { class: 'btn btn-ghost', type: 'button', text: '[개발] 모의 카메라로 AR 시험', onclick: () => void guarded(() => startAr('sim')) }) : null,
+      { class: 'land-grid' },
+      h('div', { class: 'land-visual' }, hero.el),
       h(
-        'ul',
-        { class: 'steps' },
-        h('li', {}, h('b', { text: '1' }), '카메라를 허용해요'),
-        h('li', {}, h('b', { text: '2' }), '포스터 전체를 비춰요'),
-        h('li', {}, h('b', { text: '3' }), '아래 채팅으로 물어봐요'),
+        'div',
+        { class: 'land-copy' },
+        h('p', { class: 'eyebrow', text: 'AR POSTER · CRYOGENIC PLASMA ETCHING' }),
+        h('h1', {}, `−${Math.abs(f.chiller_setpoint_c)}°C로 식혔는데,`, h('br'), h('em', { text: `기판은 왜 ${f.sample_final_c}°C일까?` })),
+        h('p', {
+          class: 'lead',
+          text: '포스터를 카메라로 비추면 해설과 3D 시뮬레이션이 그 위에 펼쳐져요. 플라즈마를 처음 듣는 1·2학년도 따라올 수 있게 기초부터 설명해요.',
+        }),
+        error ? h('div', { class: 'land-error', role: 'alert', text: error }) : null,
+        h(
+          'div',
+          { class: 'cta' },
+          arBtn,
+          h('button', { class: 'btn btn-ghost', type: 'button', text: 'AR 없이 보기', onclick: () => void guarded(() => startViewer()) }),
+          DEV ? h('button', { class: 'btn btn-ghost', type: 'button', text: '[개발] 모의 카메라', onclick: () => void guarded(() => startAr('sim')) }) : null,
+        ),
+        h(
+          'dl',
+          { class: 'stats' },
+          h('div', {}, h('dt', { text: String(scenes.length) }), h('dd', { text: '장의 해설' })),
+          h('div', {}, h('dt', { text: String(sims) }), h('dd', { text: '가지 3D 시뮬레이션' })),
+          h('div', {}, h('dt', { text: 'AI' }), h('dd', { text: '에게 바로 질문' })),
+        ),
+        h(
+          'ol',
+          { class: 'steps' },
+          h('li', {}, h('b', { text: '01' }), '카메라를 허용해요'),
+          h('li', {}, h('b', { text: '02' }), '포스터 전체를 비춰요'),
+          h('li', {}, h('b', { text: '03' }), '넘기며 보고, 궁금하면 물어봐요'),
+        ),
+        h('p', {
+          class: 'land-note',
+          text: insecure ? '이 주소는 HTTPS 가 아니라서 카메라를 쓸 수 없어요. "AR 없이 보기"를 이용해 주세요.' : '카메라 영상은 이 기기 안에서만 쓰이고 어디로도 전송되지 않아요.',
+        }),
       ),
-      status,
-      h('p', {
-        class: 'land-note',
-        text: insecure ? '이 주소는 HTTPS 가 아니라서 카메라를 쓸 수 없어요. 2D로 보기를 이용해 주세요.' : '카메라 영상은 이 기기 안에서만 쓰이고 어디로도 전송되지 않아요. 포스터가 안 잡히면 조금 뒤로 물러나 밝은 곳에서 비춰 주세요.',
-      }),
     ),
+    h('footer', { class: 'land-foot' }, h('span', { text: m.corrected_ar_title }), h('span', { text: `${m.authors.join(', ').replace('*', '')} · Plasma & Device Laboratory` })),
   );
   if (insecure) arBtn.setAttribute('disabled', '');
   app.replaceChildren(landing);
@@ -143,34 +153,36 @@ interface Session {
 let session: Session | null = null;
 
 /** 배포본 구분용 (진단 상자에 표시) */
-const BUILD = '1119f';
+const BUILD = '1120a';
 
 function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
   const debugBox = params.get('debug') ? h('pre', { class: 'debug-box' }) : null;
-  cancelAnimationFrame(landingRaf);
+  closeHero();
   const stage = new LabStage(detectQuality());
   const view = h('div', { id: 'view' });
   const statusPill = h('div', { class: 'pill status', 'data-s': mode === 'viewer' ? 'viewer' : 'starting', role: 'status' });
-  const toggle = h('button', { class: 'pill toggle', type: 'button', 'aria-pressed': 'false', text: '원본 보기' });
+  const toggle = h('button', { class: 'pill toggle', type: 'button', 'aria-pressed': 'false', text: '원본 포스터' });
   const scan = h('div', { class: `scan${mode === 'viewer' ? ' off' : ''}` }, h('div', { class: 'scan-frame' }, h('div', { class: 'scan-text' }, '포스터 전체를 네모 안에 맞춰 주세요', h('small', { text: '1 m 쯤 떨어져서, 반사가 없는 각도로' }))));
 
   /* 자막(토끼 대사) */
+  const capPart = h('div', { class: 'caption-part' });
+  const capBar = h('i', {});
   const capTitle = h('div', { class: 'caption-title' });
   const capStep = h('span', { class: 'caption-step' });
   const capText = h('p', { class: 'caption-text' });
-  const prev = h('button', { type: 'button', 'aria-label': '이전 장면', text: '◀', onclick: () => stage.prev() });
-  const next = h('button', { type: 'button', 'aria-label': '다음 장면', text: '▶', onclick: () => stage.next() });
-  const caption = h('div', { class: 'caption', hidden: true }, h('div', { class: 'caption-head' }, capTitle, capStep, h('div', { class: 'nav' }, prev, next)), capText);
+  const prev = h('button', { type: 'button', 'aria-label': '이전 장면', text: '←', onclick: () => stage.prev() });
+  const next = h('button', { type: 'button', 'aria-label': '다음 장면', text: '→', onclick: () => stage.next() });
+  const caption = h('div', { class: 'caption', hidden: true }, h('div', { class: 'caption-progress' }, capBar), h('div', { class: 'caption-head' }, h('div', { class: 'caption-titles' }, capPart, capTitle), capStep, h('div', { class: 'nav' }, prev, next)), capText);
 
   // 자막이 포스터를 가릴 때: 제목을 누르면 대사를 접었다 펼 수 있다.
-  const fold = h('button', { type: 'button', 'aria-label': '설명 접기/펴기', text: '▾' });
+  const fold = h('button', { type: 'button', 'aria-label': '설명 접기/펴기', text: '−' });
   fold.addEventListener('click', () => {
     const min = caption.classList.toggle('min');
-    fold.textContent = min ? '▴' : '▾';
+    fold.textContent = min ? '+' : '−';
   });
   caption.querySelector('.nav')!.prepend(fold);
 
-  const chipEls = sceneScripts.map((s) => h('button', { class: 'chip', type: 'button', text: s.chip, onclick: () => stage.goScene(s.id) }));
+  const chipEls = sceneScripts.map((s, i) => h('button', { class: `chip${i > 0 && sceneScripts[i - 1].part !== s.part ? ' gap' : ''}`, type: 'button', text: s.chip, onclick: () => stage.goScene(s.id) }));
   const chips = h('nav', { class: 'chips', 'aria-label': '장면 고르기', hidden: true }, ...chipEls);
 
   let currentTopic: TopicId = 'general';
@@ -221,7 +233,10 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
     caption.hidden = false;
     chips.hidden = false;
     capTitle.textContent = e.title;
-    capStep.textContent = `${e.index + 1} / ${e.total}`;
+    capPart.textContent = PART_LABEL[e.part] ?? '';
+    capStep.textContent = `${String(e.index + 1).padStart(2, '0')} / ${e.total}`;
+    capBar.style.width = `${((e.index + 1) / e.total) * 100}%`;
+    root.style.setProperty('--accent', e.accent);
     prev.disabled = e.index === 0;
     next.disabled = e.index === e.total - 1;
     if (e.silent) {
@@ -234,7 +249,7 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
     const toOriginal = stage.viewMode === 'rabbit';
     stage.setMode(toOriginal ? 'original' : 'rabbit');
     toggle.setAttribute('aria-pressed', String(toOriginal));
-    toggle.textContent = toOriginal ? '토끼 포스터' : '원본 보기';
+    toggle.textContent = toOriginal ? '해설 보기' : '원본 포스터';
   });
 
   const exit = h('button', { class: 'pill icon', type: 'button', 'aria-label': '처음으로', text: '✕', onclick: () => leave() });
@@ -287,7 +302,7 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
   const setStatus = (s: TrackState | 'viewer') => {
     statusPill.dataset.s = s;
     statusPill.textContent =
-      s === 'starting' ? '카메라를 준비하는 중…' : s === 'searching' ? '포스터를 찾는 중…' : s === 'tracking' ? '포스터 인식됨' : s === 'lost' ? '포스터를 놓쳤어요 · 다시 비춰 주세요' : '2D 보기 · 화면을 끌어 보세요';
+      s === 'starting' ? '카메라를 준비하는 중…' : s === 'searching' ? '포스터를 찾는 중…' : s === 'tracking' ? '포스터 인식됨' : s === 'lost' ? '포스터를 놓쳤어요 · 다시 비춰 주세요' : '3D 보기 · 끌어서 돌려 보세요';
     scan.classList.toggle('off', s === 'tracking' || s === 'viewer');
   };
   setStatus(mode === 'viewer' ? 'viewer' : 'starting');
@@ -351,8 +366,8 @@ function runDebug(box: HTMLElement | null, read: () => Record<string, string | n
   return () => clearInterval(id);
 }
 
-const XR_UNSUPPORTED = '이 기기나 브라우저는 AR(공간 인식)을 지원하지 않아요. Android 의 Chrome 에서 열어 주세요. 지금은 아래 "AR 없이 2D로 보기"로 같은 내용을 볼 수 있어요.';
-const XR_FAILED = 'AR 을 시작하지 못했어요. 카메라 권한을 허용했는지 확인하고 다시 시도하거나, 아래 "AR 없이 2D로 보기"를 눌러 주세요.';
+const XR_UNSUPPORTED = '이 기기나 브라우저는 AR(공간 인식)을 지원하지 않아요. Android 의 Chrome 에서 열어 주세요. 지금은 아래 "AR 없이 보기"로 같은 내용을 볼 수 있어요.';
+const XR_FAILED = 'AR 을 시작하지 못했어요. 카메라 권한을 허용했는지 확인하고 다시 시도하거나, 아래 "AR 없이 보기"를 눌러 주세요.';
 
 /**
  * 실제 기기의 AR 은 WebXR(ARCore) 공간 고정 한 가지뿐이다.
@@ -433,9 +448,9 @@ async function startVideoAr(kind: ArKind): Promise<void> {
     const msg =
       e instanceof CameraError
         ? e.kind === 'denied'
-          ? '카메라 권한이 거부됐어요. 주소창의 자물쇠 → 권한에서 카메라를 허용한 뒤 다시 시도하거나, 아래 "AR 없이 2D로 보기"를 눌러 주세요.'
-          : `${e.message} 아래 "AR 없이 2D로 보기"로도 같은 내용을 볼 수 있어요.`
-        : 'AR 을 시작하지 못했어요. "AR 없이 2D로 보기"를 이용해 주세요.';
+          ? '카메라 권한이 거부됐어요. 주소창의 자물쇠 → 권한에서 카메라를 허용한 뒤 다시 시도하거나, 아래 "AR 없이 보기"를 눌러 주세요.'
+          : `${e.message} 아래 "AR 없이 보기"로도 같은 내용을 볼 수 있어요.`
+        : 'AR 을 시작하지 못했어요. "AR 없이 보기"를 이용해 주세요.';
     showLanding(msg);
   }
 }
@@ -477,7 +492,7 @@ function exposeDebug(stage: LabStage, ar: ArView | null, viewer: ViewerView | nu
     out.width = Math.round(host.width);
     out.height = Math.round(host.height);
     const c = out.getContext('2d')!;
-    c.fillStyle = '#12264a';
+    c.fillStyle = '#05070d';
     c.fillRect(0, 0, out.width, out.height);
     if (ar) c.drawImage(ar.videoElement, rect.left - host.left, rect.top - host.top, rect.width, rect.height);
     c.drawImage(gl, rect.left - host.left, rect.top - host.top, rect.width, rect.height);
@@ -521,7 +536,14 @@ function exposeDebug(stage: LabStage, ar: ArView | null, viewer: ViewerView | nu
     });
     return best;
   };
-  (window as unknown as { __rabbit: unknown }).__rabbit = { stage, ar, viewer, chat, snap, scenes, measure };
+  /** 슬라이드 한 장(3D 소품 제외)을 PNG 로 저장한다. */
+  const page = async (i: number) => {
+    const c = document.createElement('canvas');
+    paintPage(c, i);
+    const blob: Blob = await new Promise((r) => c.toBlob((b) => r(b!), 'image/png'));
+    return (await fetch(`/__dev/save?name=page_${i}.png`, { method: 'POST', body: blob })).text();
+  };
+  (window as unknown as { __rabbit: unknown }).__rabbit = { stage, ar, viewer, chat, snap, scenes, measure, page };
 }
 
 /* ───────────────────────── 시작 ───────────────────────── */

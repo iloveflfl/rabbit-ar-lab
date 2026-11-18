@@ -1,24 +1,64 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "purpose": "UI scripted scenes; all actual research numbers must originate in poster_facts.json",
   "scenes": [
     {
       "id": "intro",
-      "title_ko": "🐰 토끼의 극저온 식각 교실",
+      "title_ko": "−50°C로 식혔는데, 왜 뜨거울까?",
       "fact_ids": [],
       "rabbit_clip": "rabbit_wave",
       "scene_action": "rabbit_greet",
       "beginner_prompt": "플라즈마로 반도체 표면을 깎을 때 왜 온도가 중요할까요?"
     },
     {
+      "id": "why_etch",
+      "title_ko": "반도체 칩은 깎아서 만든다",
+      "fact_ids": [],
+      "rabbit_clip": "rabbit_point",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "막을 쌓고, 무늬를 가리고, 나머지를 깎아 내는 것이 식각이에요."
+    },
+    {
+      "id": "plasma_state",
+      "title_ko": "플라즈마는 물질의 네 번째 상태",
+      "fact_ids": [],
+      "rabbit_clip": "rabbit_talk",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "기체에 전기 에너지를 주면 전자·이온·라디칼로 나뉘어요."
+    },
+    {
+      "id": "how_etch",
+      "title_ko": "때리고, 반응시켜 수직으로 판다",
+      "fact_ids": [],
+      "rabbit_clip": "rabbit_point",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "라디칼의 화학 반응과 이온의 충돌을 함께 써요."
+    },
+    {
+      "id": "ccp_icp",
+      "title_ko": "플라즈마를 만드는 두 가지 방법",
+      "fact_ids": [],
+      "rabbit_clip": "rabbit_think",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "축전기의 전기장(CCP)과 코일의 전자기 유도(ICP)예요."
+    },
+    {
       "id": "plasma_basics",
-      "title_ko": "플라즈마가 뭐야?",
+      "title_ko": "이 연구의 장비: ICP-RIE",
       "fact_ids": [
         "sic_continuous_minus50"
       ],
       "rabbit_clip": "rabbit_point",
       "scene_action": "rabbit_explain",
-      "beginner_prompt": "플라즈마는 재료 표면에 입자와 에너지를 전달해요."
+      "beginner_prompt": "위 코일이 플라즈마를 만들고 아래 전극이 이온을 끌어당겨요."
+    },
+    {
+      "id": "heat_path",
+      "title_ko": "열은 어디로 빠져나갈까?",
+      "fact_ids": [],
+      "rabbit_clip": "rabbit_talk",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "진공 속에서는 열이 아래 차가운 받침대로만 빠져나가요."
     },
     {
       "id": "continuous_heat",
@@ -76,13 +116,13 @@
       "fact_ids": [
         "mo_reference_etch"
       ],
-      "rabbit_clip": "rabbit_explain",
+      "rabbit_clip": "rabbit_talk",
       "scene_action": "show_mo",
       "beginner_prompt": "Mo 참고 시편에서 약 95 nm/min의 식각률이 기록됐어요."
     },
     {
       "id": "conclusion",
-      "title_ko": "오늘 배운 세 가지",
+      "title_ko": "그래서, 무엇을 알아냈나",
       "fact_ids": [
         "sic_continuous_minus50",
         "sic_cyclic_minus50",
@@ -103,5 +143,5 @@
     "rabbit_think",
     "rabbit_wave"
   ],
-  "notes": "Individual clip assets not yet created; generate one approved 2D character sheet then rig/export."
+  "notes": "장면 = 슬라이드 한 장. 순서: 기초(식각·플라즈마·장비 원리) → 이 연구의 장비와 열 → 측정 결과 → 정리."
 }

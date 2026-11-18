@@ -9,7 +9,6 @@
  * (Controller._glModelViewMatrix + postMatrix). 타깃이 포스터 일부(crop)일 때는
  * targetToPoster() 가 주는 이동·배율로 포스터 전체 좌표계로 옮긴다.
  */
-import type { HighlightId } from '@rabbit/shared';
 
 export const POSTER = {
   widthM: 0.594,
@@ -43,40 +42,27 @@ export const subRect = (r: UvRect, fx0: number, fy0: number, fx1: number, fy1: n
   v1: r.v0 + (r.v1 - r.v0) * fy1,
 });
 
-/* ───────── 새 토끼 포스터의 패널 배치 ─────────
- * 원본 포스터의 섹션 순서(위→아래)를 그대로 따른다:
- * 제목 / MOTIVATION·METHODS / 열 응답 / 식각률·받침 / Cu·Mo / CONCLUSIONS
+/* ───────── 슬라이드 한 장의 배치 ─────────
+ * 덮어쓰는 화면은 포스터 전체를 한 장의 "발표 슬라이드"로 쓴다. 장면마다 슬라이드가 바뀐다.
+ * 위에서부터: 머리줄 / 제목·설명 / 3D 시뮬 자리(HERO) / 개념 카드 / 한 줄 정리 / 진행 표시.
+ * 그림(posterArt)과 3D 소품(props)이 같은 값을 쓴다.
  */
-export const HEADER: UvRect = { u0: 0, v0: 0, u1: 1, v1: 0.118 };
-
-export const PANELS: Record<HighlightId, UvRect> = {
-  motivation: { u0: 0.03, v0: 0.128, u1: 0.552, v1: 0.31 },
-  methods: { u0: 0.568, v0: 0.128, u1: 0.97, v1: 0.31 },
-  results_thermal_continuous: { u0: 0.03, v0: 0.32, u1: 0.492, v1: 0.538 },
-  results_thermal_cyclic: { u0: 0.508, v0: 0.32, u1: 0.97, v1: 0.538 },
-  results_etch_rate: { u0: 0.03, v0: 0.548, u1: 0.492, v1: 0.732 },
-  results_mounting: { u0: 0.508, v0: 0.548, u1: 0.97, v1: 0.732 },
-  results_cu_profile: { u0: 0.03, v0: 0.742, u1: 0.662, v1: 0.897 },
-  results_mo: { u0: 0.678, v0: 0.742, u1: 0.97, v1: 0.897 },
-  conclusions: { u0: 0.03, v0: 0.907, u1: 0.97, v1: 0.99 },
-};
-
-/** 3D 그래프·장비가 들어갈 자리. 포스터 그림(posterArt)과 3D 소품(props)이 같은 값을 쓴다. */
-export const SLOTS = {
-  chamber: subRect(PANELS.methods, 0.04, 0.2, 0.96, 0.8),
-  thermometers: subRect(PANELS.results_thermal_continuous, 0.04, 0.3, 0.44, 0.9),
-  cyclicChart: subRect(PANELS.results_thermal_cyclic, 0.05, 0.24, 0.95, 0.8),
-  etchBars: subRect(PANELS.results_etch_rate, 0.04, 0.25, 0.54, 0.7),
-  mountBars: subRect(PANELS.results_mounting, 0.04, 0.25, 0.96, 0.66),
-  cuBars: subRect(PANELS.results_cu_profile, 0.03, 0.3, 0.64, 0.66),
-  moStack: subRect(PANELS.results_mo, 0.06, 0.32, 0.5, 0.8),
+export const PAGE = {
+  marginU: 0.06,
+  top: { u0: 0.06, v0: 0.02, u1: 0.94, v1: 0.05 } as UvRect,
+  title: { u0: 0.06, v0: 0.066, u1: 0.94, v1: 0.2 } as UvRect,
+  lead: { u0: 0.06, v0: 0.205, u1: 0.94, v1: 0.272 } as UvRect,
+  hero: { u0: 0.06, v0: 0.285, u1: 0.94, v1: 0.69 } as UvRect,
+  cards: { u0: 0.06, v0: 0.706, u1: 0.94, v1: 0.872 } as UvRect,
+  key: { u0: 0.06, v0: 0.888, u1: 0.75, v1: 0.946 } as UvRect,
+  progress: { u0: 0.06, v0: 0.962, u1: 0.75, v1: 0.972 } as UvRect,
 } as const;
 
 /** 막대 i 의 중심 u 좌표 (그림과 3D 막대가 같은 식을 쓴다) */
 export const barU = (slot: UvRect, i: number, n: number) => slot.u0 + ((slot.u1 - slot.u0) * (i + 0.5)) / n;
 
-/** QR 스티커가 붙는 자리(원본 Conclusions 오른쪽 빈 곳). 새 포스터에서도 비워 둔다. */
-export const QR_ZONE: UvRect = { u0: 0.876, v0: 0.916, u1: 0.96, v1: 0.981 };
+/** HERO 안에서 그래프가 실제로 서는 자리 (아래쪽은 축 이름표 자리로 남긴다) */
+export const CHART: UvRect = subRect(PAGE.hero, 0.05, 0.1, 0.95, 0.74);
 
 /** 실물(원본) 포스터에서 QR 스티커가 붙는 영역: CONCLUSIONS 띠의 오른쪽 빈 곳. 타깃을 만들 때 가린다. */
 export const ORIGINAL_QR_ZONE: UvRect = { u0: 0.8, v0: 0.932, u1: 0.972, v1: 0.977 };
@@ -103,24 +89,14 @@ export const RABBIT = {
   planeHeight: 0.36,
 } as const;
 
-/** 장면별 토끼 위치(u, v = 발 위치)와 바라보는 방향(-1 왼쪽, 1 오른쪽), 크기 배율 */
+/** 안내 토끼가 서는 자리(u, v = 발 위치)와 바라보는 방향(-1 왼쪽, 1 오른쪽), 크기 배율. 슬라이드 오른쪽 아래 모서리. */
 export interface Station {
   u: number;
   v: number;
   side: -1 | 1;
   scale: number;
 }
-export const STATIONS: Record<string, Station> = {
-  intro: { u: 0.5, v: 0.66, side: 1, scale: 1.25 },
-  plasma_basics: { u: 0.5, v: 0.31, side: 1, scale: 0.8 },
-  continuous_heat: { u: 0.02, v: 0.545, side: 1, scale: 0.85 },
-  cyclic_cooling: { u: 0.98, v: 0.545, side: -1, scale: 0.85 },
-  etch_rates: { u: 0.02, v: 0.74, side: 1, scale: 0.85 },
-  supports: { u: 0.98, v: 0.74, side: -1, scale: 0.85 },
-  cu_profiles: { u: 0.02, v: 0.905, side: 1, scale: 0.8 },
-  mo_reference: { u: 0.98, v: 0.905, side: -1, scale: 0.8 },
-  conclusion: { u: 0.5, v: 0.9, side: 1, scale: 1.15 },
-};
+export const GUIDE: Station = { u: 0.87, v: 0.985, side: -1, scale: 0.6 };
 
 /* ───────── 이미지 타깃 ─────────
  * 포스터 전체가 화면에 다 안 들어오는 가까운 거리에서도 추적이 이어지도록

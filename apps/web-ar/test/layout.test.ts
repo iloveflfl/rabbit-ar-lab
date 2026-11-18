@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { HIGHLIGHT_IDS, RABBIT_CLIPS } from '@rabbit/shared';
-import { scenes } from '@rabbit/content';
-import { H, HEADER, PANELS, POSTER, QR_ZONE, SLOTS, STATIONS, TARGETS, localToUv, targetToPoster, uvToLocal } from '../src/ar/sceneLayout';
+import { RABBIT_CLIPS } from '@rabbit/shared';
+import { sceneScripts, scenes } from '@rabbit/content';
+import { CHART, GUIDE, H, PAGE, POSTER, TARGETS, localToUv, targetToPoster, uvToLocal } from '../src/ar/sceneLayout';
 import { CLIPS, RabbitAnimator } from '../src/rabbit/clips';
 import { PART_IDS, makePose, rabbitSvg } from '../src/rabbit/rig';
 
@@ -16,38 +16,36 @@ describe('포스터 좌표계', () => {
     expect(v).toBeCloseTo(0.7);
   });
 
-  it('패널은 포스터 안에 있고 서로 겹치지 않는다', () => {
-    const rects = [HEADER, ...HIGHLIGHT_IDS.map((id) => PANELS[id])];
-    for (const r of rects) {
+  it('슬라이드의 구역은 포스터 안에 있고 위에서 아래로 겹치지 않게 놓인다', () => {
+    const order = [PAGE.top, PAGE.title, PAGE.lead, PAGE.hero, PAGE.cards, PAGE.key, PAGE.progress];
+    for (const r of order) {
       expect(r.u0).toBeGreaterThanOrEqual(0);
       expect(r.u1).toBeLessThanOrEqual(1);
       expect(r.v1).toBeLessThanOrEqual(1);
       expect(r.u1).toBeGreaterThan(r.u0);
       expect(r.v1).toBeGreaterThan(r.v0);
     }
-    for (let i = 0; i < rects.length; i++)
-      for (let j = i + 1; j < rects.length; j++) {
-        const a = rects[i];
-        const b = rects[j];
-        const overlap = a.u0 < b.u1 && b.u0 < a.u1 && a.v0 < b.v1 && b.v0 < a.v1;
-        expect(overlap, `패널 ${i}/${j} 겹침`).toBe(false);
-      }
+    for (let i = 1; i < order.length; i++) expect(order[i].v0, `구역 ${i}`).toBeGreaterThanOrEqual(order[i - 1].v1);
   });
 
-  it('3D 소품 자리는 자기 패널 안에, QR 자리는 결론 패널 안에 있다', () => {
-    const inside = (s: { u0: number; v0: number; u1: number; v1: number }, p: typeof s) => s.u0 >= p.u0 && s.u1 <= p.u1 && s.v0 >= p.v0 && s.v1 <= p.v1;
-    expect(inside(SLOTS.chamber, PANELS.methods)).toBe(true);
-    expect(inside(SLOTS.thermometers, PANELS.results_thermal_continuous)).toBe(true);
-    expect(inside(SLOTS.cyclicChart, PANELS.results_thermal_cyclic)).toBe(true);
-    expect(inside(SLOTS.etchBars, PANELS.results_etch_rate)).toBe(true);
-    expect(inside(SLOTS.mountBars, PANELS.results_mounting)).toBe(true);
-    expect(inside(SLOTS.cuBars, PANELS.results_cu_profile)).toBe(true);
-    expect(inside(SLOTS.moStack, PANELS.results_mo)).toBe(true);
-    expect(inside(QR_ZONE, PANELS.conclusions)).toBe(true);
+  it('그래프 자리는 HERO 안에 있고, 안내 토끼는 한 줄 정리·진행 표시와 겹치지 않는 오른쪽 아래에 선다', () => {
+    expect(CHART.u0).toBeGreaterThanOrEqual(PAGE.hero.u0);
+    expect(CHART.u1).toBeLessThanOrEqual(PAGE.hero.u1);
+    expect(CHART.v0).toBeGreaterThanOrEqual(PAGE.hero.v0);
+    expect(CHART.v1).toBeLessThanOrEqual(PAGE.hero.v1);
+    expect(GUIDE.u).toBeGreaterThan(PAGE.key.u1);
+    expect(GUIDE.v).toBeGreaterThan(PAGE.cards.v1);
   });
 
-  it('모든 장면에 토끼가 설 자리가 있다', () => {
-    for (const s of scenes) expect(STATIONS[s.id], s.id).toBeDefined();
+  it('장면은 기초 → 장비 → 결과 순서로 이어진다', () => {
+    expect(sceneScripts.map((s) => s.id)).toEqual(scenes.map((s) => s.id));
+    const parts = sceneScripts.map((s) => s.part);
+    for (let i = 1; i < parts.length; i++) expect(parts[i]).toBeGreaterThanOrEqual(parts[i - 1]);
+    // ICP·CCP 같은 장비 원리는 이 연구의 장비(ICP-RIE)보다 먼저 설명한다
+    const idx = (id: string) => scenes.findIndex((s) => s.id === id);
+    expect(idx('plasma_state')).toBeLessThan(idx('ccp_icp'));
+    expect(idx('ccp_icp')).toBeLessThan(idx('plasma_basics'));
+    expect(idx('heat_path')).toBeLessThan(idx('continuous_heat'));
   });
 });
 

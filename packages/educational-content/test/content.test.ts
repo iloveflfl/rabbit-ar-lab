@@ -58,7 +58,7 @@ const unknownNumbers = (text: string) => numbersIn(text).filter((n) => !factNumb
 
 describe('토끼 대사와 사전제작 답변은 포스터에 있는 숫자만 쓴다', () => {
   it('장면 대사', () => {
-    for (const s of sceneScripts) expect({ id: s.id, unknown: unknownNumbers(s.lines.join(' ')) }).toEqual({ id: s.id, unknown: [] });
+    for (const s of sceneScripts) expect({ id: s.id, unknown: unknownNumbers(s.lines.join(' ')).filter((n) => !(s.general_numbers ?? []).includes(n)) }).toEqual({ id: s.id, unknown: [] });
   });
   it('사전제작 답변', () => {
     for (const e of cannedEntries) expect({ id: e.id, unknown: unknownNumbers(e.reply) }).toEqual({ id: e.id, unknown: [] });

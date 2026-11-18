@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FONT_BODY, FONT_DISPLAY } from './posterArt';
+import { FONT_BODY, noteGlyphs } from './posterArt';
 
 export interface LabelOpts {
   /** 글자 높이(포스터 단위) */
@@ -21,6 +21,19 @@ export class Label {
   private readonly canvas = document.createElement('canvas');
   private readonly texture: THREE.CanvasTexture;
   private current = '';
+  /** 살아 있는 이름표 전부. 글꼴이 늦게 도착하면 다시 그린다. */
+  private static readonly all = new Set<Label>();
+  /** 화면을 닫을 때: 목록을 비운다 */
+  static reset(): void {
+    Label.all.clear();
+  }
+  static refreshAll(): void {
+    for (const l of Label.all) {
+      const t = l.current;
+      l.current = '';
+      l.setText(t);
+    }
+  }
 
   constructor(text: string, private readonly opts: LabelOpts) {
     this.texture = new THREE.CanvasTexture(this.canvas);
@@ -31,14 +44,16 @@ export class Label {
     const mat = new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, premultipliedAlpha: true, depthWrite: false, toneMapped: false });
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
     this.mesh.renderOrder = 30;
+    Label.all.add(this);
     this.setText(text);
   }
 
   setText(text: string): void {
     if (text === this.current) return;
     this.current = text;
+    noteGlyphs(text);
     const o = this.opts;
-    const font = `${o.weight ?? (o.display === false ? 700 : 400)} ${PX}px ${o.display === false ? FONT_BODY : FONT_DISPLAY}`;
+    const font = `${o.weight ?? (o.display === false ? 650 : 800)} ${PX}px ${FONT_BODY}`;
     const c = this.canvas.getContext('2d')!;
     c.font = font;
     const padX = o.bg ? PX * 0.5 : PX * 0.16;
@@ -64,7 +79,7 @@ export class Label {
       c.strokeStyle = o.halo;
       c.strokeText(text, w / 2, h / 2 + PX * 0.05);
     }
-    c.fillStyle = o.color ?? '#12264A';
+    c.fillStyle = o.color ?? '#F5F7FB';
     c.fillText(text, w / 2, h / 2 + PX * 0.05);
     this.texture.needsUpdate = true;
     const unit = o.size / PX;
@@ -80,6 +95,7 @@ export class Label {
   }
 
   dispose(): void {
+    Label.all.delete(this);
     this.texture.dispose();
     this.mesh.geometry.dispose();
     (this.mesh.material as THREE.Material).dispose();

@@ -48,14 +48,14 @@ export class ViewerView {
     await this.stage.init(this.renderer);
 
     // 포스터가 걸린 벽과 종이 그림자
-    const paper = new THREE.Mesh(new THREE.PlaneGeometry(1, H), new THREE.MeshBasicMaterial({ color: '#F4F8FC' }));
+    const paper = new THREE.Mesh(new THREE.PlaneGeometry(1, H), new THREE.MeshBasicMaterial({ color: '#0B1120' }));
     const shadowTex = (() => {
       const c = document.createElement('canvas');
       c.width = c.height = 256;
       const g = c.getContext('2d')!;
       const grad = g.createRadialGradient(128, 128, 60, 128, 128, 128);
-      grad.addColorStop(0, 'rgba(0,8,30,0.55)');
-      grad.addColorStop(1, 'rgba(0,8,30,0)');
+      grad.addColorStop(0, 'rgba(92,140,255,0.22)');
+      grad.addColorStop(1, 'rgba(92,140,255,0)');
       g.fillStyle = grad;
       g.fillRect(0, 0, 256, 256);
       return new THREE.CanvasTexture(c);
@@ -91,8 +91,8 @@ export class ViewerView {
 
   /** 강조 중인 패널(없으면 포스터 전체)이 UI 에 가리지 않는 영역에 들어오도록 카메라 목표를 잡는다. */
   private frameTarget(snap = false): void {
-    const b = this.stage.focusBounds();
-    const full = this.stage.focusPanel === null;
+    const b = { cx: 0, cy: 0, w: 1, h: H };
+    const full = true;
     const h = this.container.clientHeight || 1;
     const usable = Math.max(0.35, 1 - this.bottomInset / h - 0.07);
     const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));

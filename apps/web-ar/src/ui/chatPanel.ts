@@ -6,7 +6,7 @@ import { type FactId, type HighlightId, LIMITS, type TopicId } from '@rabbit/sha
 import type { Answer, ChatController, LinkStatus } from '../chat/chatController';
 import { h } from './dom';
 
-export const QUICK_PROMPTS = ['왜 영하 50도인데 기판은 73도야?', 'SiC 식각은 뭐야?', '냉각을 왜 3분씩 했어?'];
+export const QUICK_PROMPTS = ['왜 영하 50도인데 기판은 73도야?', 'ICP랑 CCP는 뭐가 달라?', '플라즈마가 뭐야?', '냉각을 왜 3분씩 했어?'];
 
 const FACT_LABEL: Record<FactId, string> = {
   semester1_si_glass_benchmark: '지난 학기 Si·유리',
@@ -19,14 +19,14 @@ const FACT_LABEL: Record<FactId, string> = {
 };
 
 const REASON: Record<string, string> = {
-  unconfigured: '토끼 서버가 연결돼 있지 않아요',
-  offline: '토끼 서버가 꺼져 있어요',
-  device_disconnected: '토끼 서버 연결이 끊겼어요',
+  unconfigured: 'AI 서버가 연결돼 있지 않아요',
+  offline: 'AI 서버가 꺼져 있어요',
+  device_disconnected: 'AI 서버 연결이 끊겼어요',
   timeout: '응답이 너무 늦었어요',
   busy: '질문이 몰려 있어요',
   rate_limited: '질문이 너무 빨랐어요',
   budget_exhausted: '오늘 답변 횟수를 다 썼어요',
-  device_error: '토끼 서버에 문제가 생겼어요',
+  device_error: 'AI 서버에 문제가 생겼어요',
 };
 
 export interface ChatPanelHooks {
@@ -52,7 +52,7 @@ export class ChatPanel {
 
   constructor(private readonly chat: ChatController, private readonly hooks: ChatPanelHooks) {
     this.log = h('div', { class: 'chat-log', role: 'log', 'aria-live': 'polite' });
-    this.input = h('input', { type: 'text', placeholder: '토끼 선생님께 물어보기', maxlength: LIMITS.maxMessageChars, enterkeyhint: 'send', autocomplete: 'off', 'aria-label': '질문 입력' });
+    this.input = h('input', { type: 'text', placeholder: '궁금한 것을 물어보세요', maxlength: LIMITS.maxMessageChars, enterkeyhint: 'send', autocomplete: 'off', 'aria-label': '질문 입력' });
     this.sendBtn = h('button', { class: 'send', type: 'submit', 'aria-label': '보내기', text: '↑' });
     this.link = h('div', { class: 'link' });
     this.quick = h('div', { class: 'quick' }, ...QUICK_PROMPTS.map((q) => h('button', { class: 'chip q', type: 'button', text: q, onclick: () => this.submit(q) })));
@@ -63,7 +63,7 @@ export class ChatPanel {
       e.preventDefault();
       this.submit(this.input.value);
     });
-    this.el = h('div', { class: 'chat', 'data-state': 'idle' }, h('div', { class: 'chat-top' }, h('span', { text: '토끼 선생님과의 대화' }), h('span', { class: 'grow' }), this.toggleBtn, closeBtn), this.log, this.quick, form, this.link);
+    this.el = h('div', { class: 'chat', 'data-state': 'idle' }, h('div', { class: 'chat-top' }, h('span', { text: 'AI 가이드와의 대화' }), h('span', { class: 'grow' }), this.toggleBtn, closeBtn), this.log, this.quick, form, this.link);
     // 입력 중 표시: 잠깐의 blur(보내기 버튼을 누르는 순간 등)에 화면이 출렁이지 않게 조금 늦춰서 끈다.
     let blurTimer = 0;
     this.input.addEventListener('focus', () => {
@@ -83,12 +83,12 @@ export class ChatPanel {
     const dot = h('span', { class: `dot ${s === 'online' ? 'online' : s === 'busy' ? 'busy' : ''}` });
     const text =
       s === 'online'
-        ? '토끼 서버 온라인 · 전시자의 AI가 답해요'
+        ? 'AI 온라인 · 발표자 PC의 로컬 AI가 답해요'
         : s === 'busy'
-          ? '토끼 서버가 바빠요 · 조금 기다려 주세요'
+          ? '질문이 몰려 있어요 · 조금 기다려 주세요'
           : s === 'connecting'
-            ? '토끼 서버에 연결하는 중…'
-            : '토끼 서버 오프라인 · 미리 준비한 답변으로 알려 줄게요';
+            ? 'AI에 연결하는 중…'
+            : 'AI 오프라인 · 미리 준비한 답변으로 알려 드려요';
     this.link.replaceChildren(dot, text);
   }
 
@@ -136,7 +136,7 @@ export class ChatPanel {
         meta.append(
           h('span', {
             class: `badge ${a.engine}`,
-            text: a.engine === 'geniex' ? '전시자 폰의 온디바이스 AI' : a.engine === 'lmstudio' ? '전시자 PC의 로컬 AI' : a.engine === 'mock' ? 'MOCK · 개발용 가짜 서버' : '미리 준비한 답변',
+            text: a.engine === 'geniex' ? '발표자 폰의 온디바이스 AI' : a.engine === 'lmstudio' ? '발표자 PC의 로컬 AI' : a.engine === 'mock' ? 'MOCK · 개발용 가짜 서버' : '미리 준비한 답변',
           }),
         );
         if (a.fallbackReason) meta.append(h('span', { class: 'badge', text: REASON[a.fallbackReason] ?? '서버가 답하지 못했어요' }));
