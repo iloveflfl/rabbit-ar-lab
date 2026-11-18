@@ -70,7 +70,7 @@ export class ChatPanel {
     const dot = h('span', { class: `dot ${s === 'online' ? 'online' : s === 'busy' ? 'busy' : ''}` });
     const text =
       s === 'online'
-        ? '토끼 서버 온라인 · 전시자 폰의 AI가 답해요'
+        ? '토끼 서버 온라인 · 전시자의 AI가 답해요'
         : s === 'busy'
           ? '토끼 서버가 바빠요 · 조금 기다려 주세요'
           : s === 'connecting'

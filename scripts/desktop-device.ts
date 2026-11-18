@@ -26,6 +26,8 @@ export interface DesktopDeviceOptions {
   /** 모델 한 번 호출의 최대 시간. 릴레이의 요청 제한(75초)보다 짧아야 한다. */
   timeoutMs?: number;
   log?: boolean;
+  /** 같은 토큰의 다른 서버에게 자리를 내줬을 때 */
+  onReplaced?: () => void;
 }
 
 export interface DesktopDevice {
@@ -52,6 +54,8 @@ export function startDesktopDevice(opts: DesktopDeviceOptions): DesktopDevice {
   let ws: WebSocket | null = null;
   let closed = false;
   let backoff = 1000;
+  /** 릴레이 연결이 바뀔 때마다 올라간다. 이전 연결에서 받은 질문을 구분하는 데 쓴다. */
+  let epoch = 0;
   let keepAlive: ReturnType<typeof setInterval> | null = null;
   const cancelled = new Set<string>();
   const aborters = new Map<string, AbortController>();
@@ -97,7 +101,21 @@ export function startDesktopDevice(opts: DesktopDeviceOptions): DesktopDevice {
     sock.addEventListener('close', (ev) => {
       if (keepAlive) clearInterval(keepAlive);
       keepAlive = null;
+      // 이 연결로 받은 질문의 답은 더 보낼 곳이 없다. 만들던 답을 멈추고 대기 중인 질문도 버린다
+      // (안 그러면 모델이 쓸모없는 답을 계속 만들며 다음 질문을 늦춘다).
+      epoch++;
+      for (const [id, a] of aborters) {
+        cancelled.add(id);
+        a.abort();
+      }
       if (closed) return;
+      if (ev.code === 4001) {
+        // 같은 토큰으로 서버가 하나 더 켜졌다. 여기서 다시 붙으면 서로 연결을 빼앗으며 끝없이 끊긴다.
+        closed = true;
+        log('다른 창에서 토끼 서버가 켜져서 이 서버는 멈춥니다. (서버는 한 번에 하나만 켜 두세요)');
+        opts.onReplaced?.();
+        return;
+      }
       log(`릴레이 연결 끊김 (${ev.code}${ev.code === 1006 ? ' — 주소나 토큰을 확인' : ''}). ${Math.round(backoff / 1000)}초 뒤 재접속`);
       setTimeout(connect, backoff);
       backoff = Math.min(30_000, backoff * 2);
@@ -109,7 +127,8 @@ export function startDesktopDevice(opts: DesktopDeviceOptions): DesktopDevice {
   // 모델은 한 번에 하나씩만 돌린다.
   let chain: Promise<void> = Promise.resolve();
   function enqueue(req: DeviceChatRequest): Promise<void> {
-    chain = chain.then(() => answer(req)).catch((e) => log('처리 오류', String(e)));
+    const born = epoch;
+    chain = chain.then(() => (born === epoch ? answer(req) : undefined)).catch((e) => log('처리 오류', String(e)));
     return chain;
   }
 
@@ -134,11 +153,18 @@ export function startDesktopDevice(opts: DesktopDeviceOptions): DesktopDevice {
     aborters.set(req.requestId, ac);
     const timer = setTimeout(() => ac.abort(), timeoutMs);
     try {
-      const res = await fetch(`${lmUrl}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages: prompt.messages, stream: true, temperature: 0.4, max_tokens: 450 }),
-        signal: ac.signal,
+      const call = () =>
+        fetch(`${lmUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model, messages: prompt.messages, stream: true, temperature: 0.4, max_tokens: 450 }),
+          signal: ac.signal,
+        });
+      // LM Studio 가 막 켜지는 중이거나 잠깐 끊긴 경우를 위해 한 번은 다시 시도한다.
+      const res = await call().catch(async (e) => {
+        if (ac.signal.aborted) throw e;
+        await new Promise((r) => setTimeout(r, 1500));
+        return call();
       });
       if (!res.ok || !res.body) throw new Error(`LM Studio HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
 
@@ -180,7 +206,7 @@ export function startDesktopDevice(opts: DesktopDeviceOptions): DesktopDevice {
         return;
       }
       stats.errors++;
-      return sendCanned(ac.signal.aborted ? '시간 초과' : String(e));
+      return sendCanned(ac.signal.aborted ? '시간 초과' : /fetch failed/.test(String(e)) ? 'LM Studio 서버에 닿지 않음 — LM Studio 가 켜져 있는지 확인' : String(e));
     }
     clearTimeout(timer);
     aborters.delete(req.requestId);
@@ -270,5 +296,5 @@ if (isMain) {
   } catch {
     console.warn('경고: 모델 예열에 실패했습니다. 첫 답변이 느릴 수 있습니다.');
   }
-  startDesktopDevice({ relayUrl, token, lmUrl, model });
+  startDesktopDevice({ relayUrl, token, lmUrl, model, onReplaced: () => process.exit(0) });
 }

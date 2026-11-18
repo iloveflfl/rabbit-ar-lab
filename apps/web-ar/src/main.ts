@@ -217,13 +217,23 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: {
 
   // 화면 키보드: 레이아웃은 그대로 두고 아래 UI 만 키보드 위로 올린다(카메라 화면 크기는 변하지 않는다).
   const vv = window.visualViewport;
+  //   글자를 칠 때마다 브라우저가 보이는 영역을 조금씩 밀고 당기는데(scroll, 한글 조합 중 추천 줄 높이 변화),
+  //   그걸 그대로 따라가면 입력창이 위아래로 떨리며 깜빡인다. 그래서 키보드가 뜨고 지는 큰 변화만 반영한다.
+  let kbShown = 0;
+  let kbRaf = 0;
+  const applyKb = () => {
+    kbRaf = 0;
+    const raw = vv ? Math.max(0, window.innerHeight - vv.height) : 0;
+    const kb = raw < 90 ? 0 : Math.round(raw);
+    if (Math.abs(kb - kbShown) < 28) return;
+    kbShown = kb;
+    root.style.setProperty('--kb', `${kb}px`);
+  };
   const onViewport = () => {
-    const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
-    root.style.setProperty('--kb', `${Math.round(kb)}px`);
+    if (!kbRaf) kbRaf = requestAnimationFrame(applyKb);
   };
   vv?.addEventListener('resize', onViewport);
-  vv?.addEventListener('scroll', onViewport);
-  onViewport();
+  applyKb();
 
   const setStatus = (s: TrackState | 'viewer') => {
     statusPill.dataset.s = s;
@@ -236,7 +246,7 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: {
   const cleanup: Array<() => void> = [
     () => clearInterval(typeTimer),
     () => vv?.removeEventListener('resize', onViewport),
-    () => vv?.removeEventListener('scroll', onViewport),
+    () => cancelAnimationFrame(kbRaf),
   ];
   return { stage, view, bottom, root, setStatus, cleanup, debugBox };
 }

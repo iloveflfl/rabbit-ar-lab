@@ -428,7 +428,6 @@ button {
   gap: 8px;
   padding: 0 10px calc(10px + var(--safe-b));
   pointer-events: none;
-  transition: bottom 0.12s;
 }
 #bottom > * {
   pointer-events: auto;

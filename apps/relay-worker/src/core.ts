@@ -85,6 +85,8 @@ export class RelayCore {
     if (this.device && this.device.conn.id !== conn.id) {
       const old = this.device.conn;
       this.device = null;
+      // 이전 단말이 만들던 답은 이제 올 수 없다. 바로 실패를 알려야 관람객이 시간 초과까지 기다리지 않는다.
+      for (const p of [...this.pending.values()]) this.failPending(p, 'device_disconnected', '토끼 서버 연결이 끊어졌어요.');
       try {
         old.close(4001, 'replaced');
       } catch {
