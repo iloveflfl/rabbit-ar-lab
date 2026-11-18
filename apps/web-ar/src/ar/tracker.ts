@@ -14,13 +14,14 @@
 import * as THREE from 'three';
 import type { HighlightId } from '@rabbit/shared';
 import type { LabStage } from '../stage/stage';
-import { type FrameTag, type Measurement, MindarBridge, priorIntrinsics, projectionFromIntrinsics } from './mindarBridge';
+import { type FrameTag, type Measurement, priorIntrinsics, projectionFromIntrinsics } from './mindarBridge';
 import { FocalCalibrator, GyroPoseFilter, WorldPosterEstimator } from './pose/filters';
 import type { Intrinsics } from './pose/planarPose';
 import { POSTER } from './sceneLayout';
 import { DeviceOrientationSource, NoOrientationSource, type OrientationSource } from './sensors';
 import { SimCamera } from './simCamera';
 import { CameraError, type TrackState } from './support';
+import { TrackerClient } from './trackerClient';
 
 export { CameraError, type TrackState };
 
@@ -42,6 +43,7 @@ export const TRACKING = {
   priorFovDeg: 65,
 } as const;
 
+const RATIO_STEPS = [2, 1.5, 1.25, 1];
 const LAT_CANDIDATES = [0, 20, 40, 60, 80, 100, 120, 140, 160];
 
 export interface ArStartOptions {
@@ -52,6 +54,8 @@ export interface ArStartOptions {
   noGyro?: boolean;
   /** 초점거리 자동 보정을 끈다 (비교 시험용) */
   noCalibration?: boolean;
+  /** 추적을 메인 스레드에서 돌린다 (비교 시험용) */
+  noWorker?: boolean;
   latencyMs?: number;
 }
 
@@ -60,7 +64,7 @@ export class ArView {
   private renderer!: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(45, 1, 0.03, 80);
-  private bridge: MindarBridge | null = null;
+  private bridge: TrackerClient | null = null;
   private stream: MediaStream | null = null;
   private sim: SimCamera | null = null;
   private orientation: OrientationSource = new NoOrientationSource();
@@ -76,6 +80,8 @@ export class ArView {
   private last = 0;
   private state: TrackState = 'starting';
   private lastMeasAt = -1e9;
+  private lastLostAt = -1e9;
+  private trackingSince = 0;
   private streak = 0;
   private lastCalibAt = 0;
   private calibratedCount = 0;
@@ -86,7 +92,7 @@ export class ArView {
   private latSamples = 0;
   private frameMs = 16;
   private slowFor = 0;
-  private downgraded = false;
+  private ratioStep = 0;
   private readonly ndc = new THREE.Vector2();
   private readonly qwc = new THREE.Quaternion();
   private readonly tp = new THREE.Vector3();
@@ -121,9 +127,10 @@ export class ArView {
       video: `${this.vw}x${this.vh}`,
       fov: `${fov.toFixed(1)}° (${this.calibratedCount ? 'calibrated' : 'prior'})`,
       gyro: this.useGyro && this.orientation.available ? `on ${this.orientation.rateDegPerSec.toFixed(0)}°/s lat ${this.latency.toFixed(0)}ms` : 'off',
-      track: s ? `${s.trackHz.toFixed(0)}Hz pts ${s.inliers}/${s.points} rms ${s.rms.toFixed(1)}px` : '-',
+      track: s ? `${s.hz.toFixed(0)}Hz pts ${s.inliers}/${s.points} rms ${s.rms.toFixed(1)}px` : '-',
+      engine: s ? `${this.bridge!.mode} ${s.ms.toFixed(0)}ms/frame, detect ${s.detects} miss ${s.misses}` : '-',
       innov: `${this.filter.lastAngleDeg.toFixed(2)}° ${(this.filter.lastShift * 100).toFixed(2)}%`,
-      fps: (1000 / this.frameMs).toFixed(0),
+      fps: `${(1000 / this.frameMs).toFixed(0)} @x${RATIO_STEPS[this.ratioStep]}`,
     };
     if (this.world) d.world = `n ${this.world.count} keys ${this.world.keyframes} width ${(this.world.estimate.width * 100).toFixed(1)}cm`;
     return d;
@@ -211,22 +218,40 @@ export class ArView {
     this.scene.add(this.stage.root);
 
     const sim = this.sim;
-    this.bridge = new MindarBridge({
+    this.bridge = new TrackerClient({
       width: vw,
       height: vh,
       intrinsics: this.K,
       targetUrl: TRACKING.targetUrl,
-      grab: (): FrameTag => {
+      useWorker: !opts.noWorker,
+      getFrame: () => {
         const time = performance.now();
+        const tag: FrameTag = { time };
         if (this.world && sim) {
-          const camPos = new THREE.Vector3();
-          const camQuat = new THREE.Quaternion();
-          sim.poseAt(time - this.latency, camPos, camQuat);
-          return { time, camPos, camQuat };
+          tag.camPos = new THREE.Vector3();
+          tag.camQuat = new THREE.Quaternion();
+          sim.poseAt(time - this.latency, tag.camPos, tag.camQuat);
         }
-        return { time };
+        return { element: this.video, tag };
+      },
+      // 영상 추적은 센서/세계 추적을 "바로잡는" 역할이므로 상태에 따라 주기를 낮춘다.
+      intervalMs: () => {
+        const b = this.bridge;
+        const inWorker = b?.mode === 'worker';
+        // 한 프레임 처리에 걸리는 시간보다 촘촘히 먹이지 않는다 (느린 기기에서 밀리지 않게).
+        const floor = b ? b.stats.ms * 1.4 : 0;
+        if (this.world) return Math.max(floor, this.world.locked ? 200 : 60);
+        // 검출은 무겁다. 워커에서는 화면을 막지 않으니 조금 더 자주 해도 된다.
+        if (this.state !== 'tracking') return Math.max(floor, inWorker ? 60 : 120);
+        const gyro = this.useGyro && this.orientation.available;
+        // 빠르게 움직이는 중이거나 방금 다시 잡았으면 촘촘히, 가만히 있으면 느슨하게.
+        const busy = (gyro && this.orientation.rateDegPerSec > 10) || performance.now() - this.lastLostAt < 1500 || this.filter.lastShift > 0.006;
+        if (inWorker) return Math.max(floor, 25); // 워커는 화면을 막지 않으므로 여유가 되는 만큼 촘촘히 돈다
+        return Math.max(floor, busy || !gyro ? 40 : 66);
       },
       predict: (tag, outP, outQ) => this.predictAt(tag, outP, outQ),
+      // 방금까지 보고 있었다면 무거운 검출 없이 예측 자세에서 바로 다시 잡는다.
+      canResume: () => this.world !== null || performance.now() - this.lastMeasAt < 500,
       onMeasurement: (m) => this.onMeasurement(m),
     });
     try {
@@ -239,7 +264,7 @@ export class ArView {
     window.addEventListener('resize', this.onResize);
     this.renderer.domElement.addEventListener('pointerup', this.onPointer);
 
-    this.bridge.start(this.video);
+    this.bridge.start();
     this.running = true;
     this.last = performance.now();
     this.setState('searching');
@@ -265,7 +290,7 @@ export class ArView {
     if (this.filter.count < 3) return false;
     const has = this.useGyro && this.orientation.at(tag.time - this.latency, this.qwc);
     if (!has) return false; // 센서가 없으면 예측할 근거가 없다 → 직전 자세에서 찾는다
-    return this.filter.predict(this.qwc, outP, outQ);
+    return this.filter.predict(this.qwc, outP, outQ, tag.time - this.latency);
   }
 
   private onMeasurement(m: Measurement): void {
@@ -280,7 +305,7 @@ export class ArView {
     if (this.useGyro && this.autoLatency) this.tuneLatency(m, now);
     const has = this.useGyro && this.orientation.at(now - this.latency, this.qwc);
     if (has && this.orientation.rateDegPerSec > TRACKING.maxRateDegPerSec) return;
-    this.filter.update(m.p, m.q, has ? this.qwc : this.ID, has);
+    this.filter.update(m.p, m.q, has ? this.qwc : this.ID, has, now - this.latency);
 
     // 초점거리 자동 보정: 비스듬한 시점이 충분히 모이면 다시 계산한다.
     const cal = this.calibrator;
@@ -352,7 +377,7 @@ export class ArView {
       el.style.left = `${left}px`;
       el.style.top = `${top}px`;
     }
-    const cap = this.downgraded || this.stage.quality === 'low' ? 1.25 : 2;
+    const cap = RATIO_STEPS[Math.max(this.ratioStep, this.stage.quality === 'low' ? 2 : 0)];
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, cap));
     this.renderer.setSize(w, h, false);
   }
@@ -372,13 +397,15 @@ export class ArView {
     this.stage.update(dt, this.camera, this.renderer.domElement.height);
     this.renderer.render(this.scene, this.camera);
 
+    // 프레임이 밀리면 그리는 해상도를 한 단계씩 낮춘다 (2 → 1.5 → 1.25 → 1).
     this.frameMs += (dt * 1000 - this.frameMs) * 0.05;
-    if (!this.downgraded) {
-      this.slowFor = this.frameMs > 36 ? this.slowFor + dt : 0;
-      if (this.slowFor > 4) {
-        this.downgraded = true;
-        this.layout();
-      }
+    // 시작 직후의 셰이더 컴파일·등장 연출 때문에 생기는 일시적인 끊김은 세지 않는다.
+    const settled = this.state === 'tracking' && performance.now() - this.trackingSince > 6000;
+    this.slowFor = settled && this.frameMs > 24 ? this.slowFor + dt : 0;
+    if (this.slowFor > 2.5 && this.ratioStep < RATIO_STEPS.length - 1) {
+      this.ratioStep++;
+      this.slowFor = 0;
+      this.layout();
     }
   };
 
@@ -399,7 +426,7 @@ export class ArView {
       }
     } else if (this.filter.count >= 3 && (fresh || this.state === 'tracking')) {
       const has = this.useGyro && this.orientation.at(now - this.latency, this.qwc);
-      if (this.filter.predict(has ? this.qwc : this.ID, this.tp, this.tq)) {
+      if (this.filter.predict(has ? this.qwc : this.ID, this.tp, this.tq, now - this.latency)) {
         root.position.copy(this.tp);
         root.quaternion.copy(this.tq);
         root.scale.setScalar(1);
@@ -412,11 +439,14 @@ export class ArView {
         root.visible = true;
         this.stage.setTracking(true);
         if (!this.stage.isRevealed) this.stage.reveal();
+        this.trackingSince = now;
+        this.lastLostAt = now;
         this.setState('tracking');
       }
     } else if (this.state === 'tracking') {
       root.visible = false;
       this.filter.reset();
+      this.lastLostAt = now;
       this.stage.setTracking(false);
       this.setState('lost');
     }

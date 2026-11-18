@@ -134,6 +134,7 @@ export class GyroPoseFilter {
   private readonly tq = new Quaternion();
   private readonly tv = new Vector3();
   private readonly tv2 = new Vector3();
+  private lastTime = 0;
   count = 0;
   /** 최근 관측과 추정의 차이 (진단용) */
   lastAngleDeg = 0;
@@ -143,12 +144,14 @@ export class GyroPoseFilter {
     this.count = 0;
   }
 
-  update(p: Vector3, q: Quaternion, qwc: Quaternion, hasGyro: boolean): void {
+  /** time: 이 관측의 프레임을 찍은 시각 (ms). 속도 추정에 쓴다. */
+  update(p: Vector3, q: Quaternion, qwc: Quaternion, hasGyro: boolean, time = 0): void {
     const qm = this.tq.copy(qwc).multiply(q);
     const pm = this.tv.copy(p).applyQuaternion(qwc);
     if (this.count === 0) {
       this.qwp.copy(qm);
       this.pw.copy(pm);
+      this.lastTime = time;
       this.count = 1;
       return;
     }
@@ -185,16 +188,18 @@ export class GyroPoseFilter {
       aDepth = clamp(0.08 + (depthShift / 0.015) ** 2, 0.08, 1);
     }
     this.qwp.slerp(qm, ar);
+    this.lastTime = time;
     this.pw.addScaledVector(perp, aPerp).addScaledVector(dir, along * aDepth);
     this.count++;
   }
 
   /** 지금의 카메라 방향 q_wc 에서 포스터가 보여야 할 카메라 기준 자세. */
-  predict(qwc: Quaternion, outP: Vector3, outQ: Quaternion): boolean {
+  predict(qwc: Quaternion, outP: Vector3, outQ: Quaternion, _time = 0): boolean {
     if (this.count === 0) return false;
     const inv = this.tq.copy(qwc).invert();
     outQ.copy(inv).multiply(this.qwp);
-    outP.copy(this.pw).applyQuaternion(inv);
+    outP.copy(this.pw);
+    outP.applyQuaternion(inv);
     return true;
   }
 }

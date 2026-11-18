@@ -39,9 +39,11 @@ export class RabbitSprite {
   private readonly mesh: THREE.Mesh;
   private readonly q = new THREE.Quaternion();
   private readonly q2 = new THREE.Quaternion();
+  private pending = 0;
+  private first = true;
 
   constructor(quality: 'high' | 'low') {
-    this.art = new RabbitCanvas(quality === 'high' ? 1.5 : 1);
+    this.art = new RabbitCanvas(quality === 'high' ? 1.25 : 1);
     this.texture = new THREE.CanvasTexture(this.art.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.premultiplyAlpha = true;
@@ -83,8 +85,15 @@ export class RabbitSprite {
 
   /** dt 만큼 애니메이션을 진행하고, 평면을 카메라 쪽으로 돌린다. */
   update(dt: number, camera: THREE.Camera): void {
-    this.art.draw(dt);
-    this.texture.needsUpdate = true;
+    // 토끼 그림은 초당 30번만 다시 그린다: 2D 캔버스를 그리고 GPU 로 올리는 일이 매 프레임 하기엔 비싸다.
+    // (평면의 위치·방향은 매 프레임 갱신되므로 움직임은 그대로 부드럽다.)
+    this.pending += dt;
+    if (this.pending >= 1 / 31 || this.first) {
+      this.art.draw(this.pending);
+      this.texture.needsUpdate = true;
+      this.pending = 0;
+      this.first = false;
+    }
     const parent = this.group.parent;
     if (parent) {
       parent.getWorldQuaternion(this.q).invert();

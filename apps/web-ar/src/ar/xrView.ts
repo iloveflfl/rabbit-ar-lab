@@ -19,12 +19,13 @@
 import * as THREE from 'three';
 import type { HighlightId } from '@rabbit/shared';
 import type { LabStage } from '../stage/stage';
-import { type FrameTag, type Measurement, MindarBridge } from './mindarBridge';
+import type { FrameTag, Measurement } from './mindarBridge';
 import { WorldPosterEstimator } from './pose/filters';
 import type { Intrinsics } from './pose/planarPose';
 import { POSTER } from './sceneLayout';
 import { type TrackState, rememberXr, xrSupported } from './support';
 import { TRACKING } from './tracker';
+import { type FrameSource, TrackerClient } from './trackerClient';
 
 export interface XrCallbacks {
   onState(state: TrackState): void;
@@ -63,8 +64,11 @@ export class XrArView {
   private readonly camera = new THREE.PerspectiveCamera(60, 1, 0.05, 60);
   private session: Any = null;
   private binding: Any = null;
-  private bridge: MindarBridge | null = null;
+  private bridge: TrackerClient | null = null;
   private bridgeReady = false;
+  private bridgeStarting = false;
+  /** 추적기가 다음 프레임을 기다리고 있으면, XR 프레임에서 카메라 영상을 읽어 넘겨준다. */
+  private frameWaiter: ((src: FrameSource | null) => void) | null = null;
   private readonly world = new WorldPosterEstimator(POSTER.widthM);
   private state: TrackState = 'starting';
   private ended = false;
@@ -75,9 +79,6 @@ export class XrArView {
   private vao: WebGLVertexArrayObject | null = null;
   private fbo: WebGLFramebuffer | null = null;
   private fboTex: WebGLTexture | null = null;
-  private pixels: Uint8Array | null = null;
-  private canvas: HTMLCanvasElement | null = null;
-  private ctx: CanvasRenderingContext2D | null = null;
   private w = 0;
   private h = 0;
   private K: Intrinsics | null = null;
@@ -85,8 +86,6 @@ export class XrArView {
   private flip = false;
   private flipAt = 0;
 
-  private tag: FrameTag = { time: 0 };
-  private frameNo = 0;
   private last = 0;
   private lastMeasAt = -1e9;
   private lastPoseAt = 0;
@@ -116,7 +115,8 @@ export class XrArView {
       state: this.state,
       camImg: this.w ? `${this.w}x${this.h} flip ${this.flip ? 1 : 0}` : 'waiting',
       fov: this.K ? `${((2 * Math.atan(this.h / 2 / this.K.fy) * 180) / Math.PI).toFixed(1)}° v` : '-',
-      track: s ? `${s.trackHz.toFixed(0)}Hz pts ${s.inliers}/${s.points} rms ${s.rms.toFixed(1)}px` : '-',
+      track: s ? `${s.hz.toFixed(1)}Hz pts ${s.inliers}/${s.points} rms ${s.rms.toFixed(1)}px` : '-',
+      engine: s ? `${this.bridge!.mode} ${s.ms.toFixed(0)}ms/frame, detect ${s.detects} miss ${s.misses}` : '-',
       meas: this.measCount,
       world: `n ${this.world.count} keys ${this.world.keyframes}`,
       width: `${(e.width * 100).toFixed(1)}cm`,
@@ -145,6 +145,8 @@ export class XrArView {
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.xr.enabled = true;
+    // 기기 기본 해상도의 80% 로 그린다: 큰 반투명 면이 많아 채우는 비용이 크다. 글자 선명도는 거의 그대로다.
+    this.renderer.xr.setFramebufferScaleFactor(0.8);
     this.renderer.xr.setReferenceSpaceType('local');
     await this.renderer.xr.setSession(session);
     this.gl = this.renderer.getContext() as WebGL2RenderingContext;
@@ -181,7 +183,6 @@ export class XrArView {
     const dt = Math.max(0, Math.min(0.1, (now - this.last) / 1000));
     this.last = now;
     if (dt > 0) this.fps += (1 / dt - this.fps) * 0.05;
-    this.frameNo++;
 
     const ref = this.renderer.xr.getReferenceSpace();
     const vp = ref ? frame.getViewerPose(ref) : null;
@@ -217,10 +218,15 @@ export class XrArView {
     this.stage.update(dt, this.renderer.xr.getCamera(), base?.framebufferHeight ?? 1600);
     this.renderer.render(this.scene, this.camera);
 
-    // 카메라 영상을 추적기로 넘긴다 (두 프레임에 한 번이면 충분하다).
-    if (view?.camera && this.frameNo % 2 === 0) {
+    // 카메라 영상은 추적기가 달라고 할 때만 읽는다 (GPU → CPU 읽기는 비싸다).
+    if (view?.camera) {
       try {
-        this.grab(view, now);
+        if (!this.bridge && !this.bridgeStarting) this.bootstrap(view);
+        else if (this.frameWaiter) {
+          const waiter = this.frameWaiter;
+          this.frameWaiter = null;
+          waiter(this.grab(view, now));
+        }
       } catch (e) {
         console.warn('camera image grab failed', e);
       }
@@ -230,7 +236,7 @@ export class XrArView {
     // 영상은 오는데 한 번도 인식하지 못하면(25초) 포기하고 카메라 영상 경로로 넘긴다.
     if (!this.gaveUp && this.measCount === 0) {
       const waited = now - this.startedAt;
-      if ((this.w === 0 && waited > 5000) || waited > 25000) {
+      if ((this.w === 0 && waited > 5000) || waited > 30000) {
         this.gaveUp = true;
         this.cb.onGiveUp(this.w === 0 ? 'no-camera-image' : 'no-detection');
         return;
@@ -244,14 +250,32 @@ export class XrArView {
     }
   }
 
-  private grab(view: Any, now: number): void {
+  /** 브라우저가 알려 주는 실제 내부 파라미터 (카메라 영상은 이 뷰의 투영과 정렬돼 있다). */
+  private intrinsicsOf(view: Any): Intrinsics {
+    const P = view.projectionMatrix as Float32Array;
+    return { fx: (P[0] * this.w) / 2, fy: (P[5] * this.h) / 2, cx: ((1 - P[8]) * this.w) / 2, cy: ((1 + P[9]) * this.h) / 2 };
+  }
+
+  /** 첫 카메라 프레임에서 영상 크기와 내부 파라미터를 알아내고 추적기를 띄운다. */
+  private bootstrap(view: Any): void {
+    this.bridgeStarting = true;
+    this.setupCopy(view.camera.width, view.camera.height);
+    this.K = this.intrinsicsOf(view);
+    void this.startBridge();
+  }
+
+  /** 카메라 영상 텍스처를 작은 버퍼로 복사해 픽셀로 읽는다. */
+  private grab(view: Any, now: number): FrameSource | null {
     const gl = this.gl;
-    const cam = view.camera;
-    const tex: WebGLTexture | null = this.binding.getCameraImage(cam);
-    if (!tex) return;
-    if (!this.canvas) this.setupCopy(cam.width, cam.height);
+    const tex: WebGLTexture | null = this.binding.getCameraImage(view.camera);
+    if (!tex) return null;
     const w = this.w;
     const h = this.h;
+    const size = w * h * 4;
+    // 워커가 돌려준 버퍼가 있으면 다시 쓴다.
+    let pixels = this.bridge?.spare ?? null;
+    if (this.bridge) this.bridge.spare = null;
+    if (!pixels || pixels.byteLength !== size) pixels = new Uint8Array(size);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
     gl.viewport(0, 0, w, h);
@@ -267,26 +291,20 @@ export class XrArView {
     gl.uniform1i(gl.getUniformLocation(this.prog!, 'uTex'), 0);
     gl.uniform1f(gl.getUniformLocation(this.prog!, 'uFlip'), this.flip ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
     gl.bindVertexArray(null);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     // three.js 가 알고 있는 GL 상태와 어긋나지 않게 초기화한다.
     this.renderer.resetState();
 
-    this.ctx!.putImageData(new ImageData(new Uint8ClampedArray(this.pixels!.buffer as ArrayBuffer), w, h), 0, 0);
-    this.tag = { time: now, camPos: this.camPos.clone(), camQuat: this.camQuat.clone() };
-
-    // 브라우저가 알려 주는 실제 내부 파라미터 (카메라 영상은 이 뷰의 투영과 정렬돼 있다).
-    const P = view.projectionMatrix as Float32Array;
-    const K: Intrinsics = { fx: (P[0] * w) / 2, fy: (P[5] * h) / 2, cx: ((1 - P[8]) * w) / 2, cy: ((1 + P[9]) * h) / 2 };
-    if (!this.K) {
+    const K = this.intrinsicsOf(view);
+    if (this.K && (Math.abs(K.fx / this.K.fx - 1) > 0.01 || Math.abs(K.cx - this.K.cx) > 1 || Math.abs(K.cy - this.K.cy) > 1)) {
       this.K = K;
-      void this.startBridge();
-    } else if (Math.abs(K.fx / this.K.fx - 1) > 0.01 || Math.abs(K.cx - this.K.cx) > 1 || Math.abs(K.cy - this.K.cy) > 1) {
-      this.K = K;
-      if (this.bridgeReady) this.bridge!.setIntrinsics(K);
+      this.bridge?.setIntrinsics(K);
     }
+    const tag: FrameTag = { time: now, camPos: this.camPos.clone(), camQuat: this.camQuat.clone() };
+    return { pixels, tag };
   }
 
   private setupCopy(camW: number, camH: number): void {
@@ -295,11 +313,11 @@ export class XrArView {
     this.w = Math.max(2, Math.round(camW * scale));
     this.h = Math.max(2, Math.round(camH * scale));
     const compile = (type: number, src: string) => {
-      const s = gl.createShader(type)!;
-      gl.shaderSource(s, src);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) ?? 'shader');
-      return s;
+      const sh = gl.createShader(type)!;
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) ?? 'shader');
+      return sh;
     };
     const prog = gl.createProgram()!;
     gl.attachShader(prog, compile(gl.VERTEX_SHADER, BLIT_VERT));
@@ -328,21 +346,41 @@ export class XrArView {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fboTex, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindTexture(gl.TEXTURE_2D, null);
+    this.renderer.resetState();
+  }
 
-    this.pixels = new Uint8Array(this.w * this.h * 4);
-    this.canvas = document.createElement('canvas');
-    this.canvas.width = this.w;
-    this.canvas.height = this.h;
-    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+  /** 고정된 포스터가 지금 카메라 화면 안(조금 넉넉하게)에 들어와 있는가. */
+  private posterInView(): boolean {
+    if (!this.K) return true;
+    const e = this.world.estimate;
+    const p = this.tv.copy(e.position).sub(this.camPos).applyQuaternion(this.tq.copy(this.camQuat).invert());
+    if (p.z > -0.05) return false;
+    const u = this.K.cx + (this.K.fx * p.x) / -p.z;
+    const v = this.K.cy - (this.K.fy * p.y) / -p.z;
+    return u > -0.35 * this.w && u < 1.35 * this.w && v > -0.35 * this.h && v < 1.35 * this.h;
   }
 
   private async startBridge(): Promise<void> {
-    this.bridge = new MindarBridge({
+    this.bridge = new TrackerClient({
       width: this.w,
       height: this.h,
       intrinsics: this.K!,
       targetUrl: TRACKING.targetUrl,
-      grab: () => this.tag,
+      getFrame: () => {
+        // 이미 고정됐고 포스터가 화면 밖이면 추적할 것이 없다 → 아무것도 하지 않는다.
+        if (this.world.locked && !this.posterInView()) return null;
+        return new Promise<FrameSource | null>((resolve) => {
+          this.frameWaiter = resolve;
+          window.setTimeout(() => {
+            if (this.frameWaiter === resolve) {
+              this.frameWaiter = null;
+              resolve(null);
+            }
+          }, 600);
+        });
+      },
+      // 고정되기 전에는 빨리 모으고(초당 14번), 고정된 뒤에는 천천히 바로잡기만 한다(초당 4번).
+      intervalMs: () => (this.world.locked ? 250 : 70),
       predict: (tag, outP, outQ) => {
         if (!this.world.locked || !tag.camPos || !tag.camQuat) return false;
         const e = this.world.estimate;
@@ -351,6 +389,7 @@ export class XrArView {
         outP.copy(e.position).sub(tag.camPos).applyQuaternion(inv).multiplyScalar(1 / e.width);
         return true;
       },
+      canResume: () => true,
       onMeasurement: (m: Measurement) => {
         if (this.measCount++ === 0) rememberXr('ok');
         this.lastMeasAt = m.tag.time;
@@ -359,7 +398,7 @@ export class XrArView {
     });
     try {
       await this.bridge.init();
-      this.bridge.start(this.canvas!);
+      this.bridge.start();
       this.bridgeReady = true;
     } catch (e) {
       console.error('poster tracker init failed', e);
