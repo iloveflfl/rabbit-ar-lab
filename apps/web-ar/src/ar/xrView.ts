@@ -32,7 +32,7 @@ export interface XrCallbacks {
   onTap(panel: HighlightId | null): void;
   /** 사용자가 뒤로 가기 등으로 AR 세션을 끝냈을 때 */
   onEnd(): void;
-  /** 이 기기에서는 WebXR 경로로 포스터를 찾지 못한다고 판단했을 때 (카메라 영상 경로로 바꿔야 한다) */
+  /** 이 기기에서는 AR 세션이 카메라 영상을 주지 않을 때 (AR 을 쓸 수 없다) */
   onGiveUp(reason: string): void;
 }
 
@@ -281,15 +281,13 @@ export class XrArView {
       }
     }
 
-    // 안전장치: 이 경로는 실기기에서 검증되지 않았다. 카메라 영상이 아예 안 오거나(5초),
-    // 영상은 오는데 한 번도 인식하지 못하면(25초) 포기하고 카메라 영상 경로로 넘긴다.
-    if (!this.gaveUp && this.measCount === 0) {
-      const waited = now - this.startedAt;
-      if ((this.w === 0 && waited > 5000) || waited > 30000) {
-        this.gaveUp = true;
-        this.cb.onGiveUp(this.w === 0 ? 'no-camera-image' : 'no-detection');
-        return;
-      }
+    // 안전장치: 카메라 영상이 아예 오지 않으면(8초) AR 을 쓸 수 없는 기기로 보고 알린다.
+    // 포스터를 아직 못 찾은 것은 실패가 아니다(관람객이 아직 포스터를 비추지 않았을 뿐일 수 있다). 계속 찾는다.
+    // 예전에는 30초 안에 못 찾으면 카메라 영상 방식으로 넘겨 버려서, 새 기기가 그 방식으로 굳는 일이 있었다.
+    if (!this.gaveUp && this.w === 0 && now - this.startedAt > 8000) {
+      this.gaveUp = true;
+      this.cb.onGiveUp('no-camera-image');
+      return;
     }
 
     // 한참 인식이 안 되면 영상이 뒤집혀 들어오는 구현일 수 있다 → 뒤집어 본다.

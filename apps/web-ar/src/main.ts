@@ -2,8 +2,7 @@ import '@fontsource/jua';
 import './styles.css';
 import type { HighlightId, TopicId } from '@rabbit/shared';
 import { sceneScripts, scenes } from '@rabbit/content';
-import { DeviceOrientationSource } from './ar/sensors';
-import { CameraError, type TrackState, forgetArMode, rememberXr, xrKnownBad, xrSupported } from './ar/support';
+import { CameraError, type TrackState, xrSupported } from './ar/support';
 import type { ArView } from './ar/tracker';
 import { ViewerView } from './ar/viewer';
 import { ChatController } from './chat/chatController';
@@ -112,9 +111,9 @@ interface Session {
 let session: Session | null = null;
 
 /** 배포본 구분용 (진단 상자에 표시) */
-const BUILD = '1119e';
+const BUILD = '1119f';
 
-function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: { label: string; title: string; onClick: () => void }) {
+function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
   const debugBox = params.get('debug') ? h('pre', { class: 'debug-box' }) : null;
   cancelAnimationFrame(landingRaf);
   const stage = new LabStage(detectQuality());
@@ -218,7 +217,6 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: {
       { class: 'hud' },
       exit,
       statusPill,
-      switcher ? h('button', { class: 'pill switch', type: 'button', title: switcher.title, 'aria-label': switcher.title, text: switcher.label, onclick: switcher.onClick }) : null,
       mode === 'ar' ? toggle : h('span', { style: 'width:40px' }),
     ),
     simulated ? h('div', { class: 'sim-badge', text: '모의 카메라 (개발용) — 실기기 검증 아님' }) : null,
@@ -321,88 +319,56 @@ function runDebug(box: HTMLElement | null, read: () => Record<string, string | n
   return () => clearInterval(id);
 }
 
+const XR_UNSUPPORTED = '이 기기나 브라우저는 AR(공간 인식)을 지원하지 않아요. Android 의 Chrome 에서 열어 주세요. 지금은 아래 "AR 없이 2D로 보기"로 같은 내용을 볼 수 있어요.';
+const XR_FAILED = 'AR 을 시작하지 못했어요. 카메라 권한을 허용했는지 확인하고 다시 시도하거나, 아래 "AR 없이 2D로 보기"를 눌러 주세요.';
+
+/**
+ * 실제 기기의 AR 은 WebXR(ARCore) 공간 고정 한 가지뿐이다.
+ * 카메라 영상 + 자이로 방식(이른바 60fps 모드)은 실제 폰에서 떨림이 심해 뺐다. 지원하지 않는 기기는 2D 보기로 안내한다.
+ * (영상 방식 코드는 개발용 모의 카메라 ?mode=sim 에서만 쓴다.)
+ */
 async function startAr(kind: ArKind): Promise<void> {
   session?.stop();
-  // iOS 는 방향 센서 권한을 "탭한 직후"에만 물을 수 있다. 다른 await 보다 먼저 부른다.
-  const motion = kind === 'device' && params.get('gyro') !== '0' ? DeviceOrientationSource.requestPermission() : Promise.resolve(false);
+  session = null;
+  if (kind !== 'device') return startVideoAr(kind);
+  if (!(await xrSupported())) return showLanding(XR_UNSUPPORTED);
 
-  // 1순위: WebXR(ARCore) 세계 추적. 지원하지 않거나 시작에 실패하면 카메라 영상 경로로 내려간다.
-  //   ?xr=0 이면 건너뛰고, ?xr=1 이면 예전에 실패했던 기기에서도 다시 시도한다.
-  //   공간 고정이 항상 기본이다. 카메라 영상 방식(60fps)은 실제 폰에서 떨림이 심해서
-  //   ?debug=1 일 때만 실험용 버튼으로 남겨 두고, 고른 것을 기억하지도 않는다.
-  forgetArMode();
-  const wantXr = kind === 'device' && params.get('xr') !== '0' && (params.get('xr') === '1' || !xrKnownBad());
-  if (wantXr && (await xrSupported())) {
-    const [, { XrArView }] = await loadAr();
-    const ui = buildExperience(
-      'ar',
-      false,
-      params.get('debug')
-        ? {
-            label: '60fps',
-            title: '실험: 카메라 영상 + 자이로 방식으로 전환 (최대 60fps, 떨림 큼)',
-            onClick: () => {
-              session?.stop();
-              session = null;
-              void startVideoAr(kind, motion);
-            },
-          }
-        : undefined,
-    );
-    ui.root.classList.add('xr');
-    const xr = new XrArView(ui.stage, {
-      onState: (s) => ui.setStatus(s),
-      onTap: (p) => p && ui.stage.selectPanel(p),
-      onEnd: () => leave(),
-      onGiveUp: (reason) => {
-        console.warn('WebXR 경로 포기:', reason);
-        rememberXr('bad');
-        session?.stop();
-        session = null;
-        void startVideoAr(kind, motion);
-      },
-    });
-    const stopDebug = runDebug(ui.debugBox, () => ({ ...xr.debug, ...ui.uiDebug() }));
-    session = {
-      stage: ui.stage,
-      stop: () => {
-        stopDebug();
-        ui.cleanup.forEach((f) => f());
-        xr.stop();
-        ui.stage.dispose();
-      },
-    };
-    try {
-      await xr.start(ui.root);
-      return;
-    } catch (e) {
-      console.warn('WebXR 경로를 쓸 수 없어 카메라 영상 경로로 전환합니다:', e);
-      session.stop();
-      session = null;
-    }
+  const [, { XrArView }] = await loadAr();
+  const ui = buildExperience('ar', false);
+  ui.root.classList.add('xr');
+  const fail = (why: unknown) => {
+    console.warn('AR 시작 실패:', why);
+    session?.stop();
+    session = null;
+    showLanding(XR_FAILED);
+  };
+  const xr = new XrArView(ui.stage, {
+    onState: (s) => ui.setStatus(s),
+    onTap: (p) => p && ui.stage.selectPanel(p),
+    onEnd: () => leave(),
+    onGiveUp: (reason) => fail(reason),
+  });
+  const stopDebug = runDebug(ui.debugBox, () => ({ ...xr.debug, ...ui.uiDebug() }));
+  session = {
+    stage: ui.stage,
+    stop: () => {
+      stopDebug();
+      ui.cleanup.forEach((f) => f());
+      xr.stop();
+      ui.stage.dispose();
+    },
+  };
+  try {
+    await xr.start(ui.root);
+  } catch (e) {
+    fail(e);
   }
-  await startVideoAr(kind, motion);
 }
 
-/** 카메라 영상 경로 (WebXR 이 없는 기기, 또는 WebXR 이 실패했을 때). */
-async function startVideoAr(kind: ArKind, motion: Promise<boolean>): Promise<void> {
+/** 카메라 영상 경로. 개발용 모의 카메라(?mode=sim, simworld)에서만 쓴다. */
+async function startVideoAr(kind: ArKind): Promise<void> {
   const [{ ArView }] = await loadAr();
-  // 공간 고정(WebXR)을 쓸 수 있는 기기에서는 그쪽으로 돌아가는 버튼을 보여 준다.
-  const canXr = kind === 'device' && params.get('xr') !== '0' && (await xrSupported());
-  const ui = buildExperience(
-    'ar',
-    kind !== 'device',
-    canXr
-      ? {
-          label: '고정',
-          title: '공간 고정 보기로 전환 (ARCore, 더 안정적이지만 보통 30fps)',
-          onClick: () => {
-            rememberXr('ok');
-            void startAr('device');
-          },
-        }
-      : undefined,
-  );
+  const ui = buildExperience('ar', kind !== 'device');
   const ar = new ArView(ui.view, ui.stage, {
     onState: (s) => ui.setStatus(s),
     onTap: (p) => p && ui.stage.selectPanel(p),
@@ -418,11 +384,10 @@ async function startVideoAr(kind: ArKind, motion: Promise<boolean>): Promise<voi
     },
   };
   try {
-    const granted = await motion;
     await ar.start({
       simulate: kind !== 'device',
       simWorld: kind === 'simworld',
-      noGyro: params.get('gyro') === '0' || (kind === 'device' && !granted),
+      noGyro: params.get('gyro') === '0',
       noCalibration: params.get('cal') === '0',
       noWorker: params.get('worker') === '0',
       noFrameClock: params.get('vfc') === '0',
