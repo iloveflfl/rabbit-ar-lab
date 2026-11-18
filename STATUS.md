@@ -19,7 +19,9 @@
 | 릴레이 (Worker + Durable Object) | 자동화 (로컬 workerd 런타임 E2E). 실제 Cloudflare 배포는 **미검증** |
 | Android 앱 | 자동화 (단위 테스트 15개, debug APK 빌드). 실기기 설치·실행은 **미검증** |
 | GenieX 온디바이스 추론 / NPU | **미검증** — 실제 SDK 0.10.0 에 맞춰 컴파일만 확인. 모델을 한 번도 실행하지 못함 |
-| 실제 고정 주소 / GitHub Pages URL / QR 스티커 | **미구현(배포 전)** — 계정 주인이 해야 함 |
+| GitHub Pages 배포 | **실측** — https://iloveflfl.github.io/rabbit-ar-lab/ (2026-11-18, Actions 로 배포, 데스크톱 브라우저에서 2D 보기 확인) |
+| QR 이미지 | 생성됨 (`assets/qr/`). 인쇄·부착·폰으로 읽기는 **미검증** |
+| 릴레이 고정 주소 (Cloudflare) | **미배포** — 소유자가 나중에 하기로 함. 지금 공개 사이트의 채팅은 사전제작 답변으로만 동작 |
 
 ## 1. 관람객용 WebAR
 
@@ -105,10 +107,10 @@
 
 ## 5. 소유자가 해야 하는 일 (순서대로)
 
-1. `reference/` 를 공개 저장소에 올릴지 결정 (기본은 제외).
+1. ~~GitHub 저장소·Pages 배포~~ — 완료 (iloveflfl/rabbit-ar-lab, 이전 내용은 `legacy-2026-11-16` 브랜치에 보존).
 2. Cloudflare 에 릴레이 배포, `DEVICE_TOKEN` 등록 → 주소 확정 (SETUP_WORKERS.md).
-3. GitHub 저장소에 올리고 `VITE_RELAY_URL` 변수 설정 → Pages 배포 → 주소 확정 (DEPLOY_GITHUB_PAGES.md).
-4. 릴레이의 `ALLOWED_ORIGINS` 를 Pages 주소로 설정.
+3. 저장소 Settings → Variables 에 `VITE_RELAY_URL` 을 넣고 Pages 워크플로를 다시 실행.
+4. 릴레이의 `ALLOWED_ORIGINS` 를 `https://iloveflfl.github.io` 로 설정.
 5. S26 Ultra 에 APK 설치, 최초 설정, 모델 선택·시험 (INSTALL_ANDROID.md, DEVICE_VERIFICATION.md).
 6. 인쇄된 포스터로 인식 시험, 필요하면 필터·타깃 조정 (AR_CALIBRATION.md).
-7. 확정된 주소로 QR 생성·인쇄·부착, 부착 후 다시 인식 시험.
+7. `assets/qr/poster-qr.png` 인쇄(한 변 45~50 mm)·부착, 부착 후 다시 인식 시험.
