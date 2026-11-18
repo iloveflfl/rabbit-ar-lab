@@ -268,7 +268,7 @@ export class LabStage {
     paintPoster(this.posterCanvas);
     this.posterTex = new THREE.CanvasTexture(this.posterCanvas);
     this.posterTex.colorSpace = THREE.SRGBColorSpace;
-    this.posterTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    this.posterTex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
     this.posterTex.minFilter = THREE.LinearMipmapLinearFilter;
     this.posterTex.generateMipmaps = true;
     this.posterMat.uniforms.map.value = this.posterTex;

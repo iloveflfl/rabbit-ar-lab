@@ -43,7 +43,7 @@ export class RabbitSprite {
   private first = true;
 
   constructor(quality: 'high' | 'low') {
-    this.art = new RabbitCanvas(quality === 'high' ? 1.25 : 1);
+    this.art = new RabbitCanvas(quality === 'high' ? 1 : 0.75);
     this.texture = new THREE.CanvasTexture(this.art.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.premultiplyAlpha = true;

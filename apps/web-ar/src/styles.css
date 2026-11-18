@@ -1,7 +1,9 @@
 :root {
   --navy: #0b1a38;
   --navy-2: #12264a;
-  --glass: rgba(11, 26, 56, 0.74);
+  /* 배경 블러(backdrop-filter)는 쓰지 않는다: 움직이는 카메라 영상 위에서 매 프레임 다시 흐리게 만드느라
+     모바일 GPU 를 크게 잡아먹는다. 대신 조금 더 불투명한 단색을 쓴다. */
+  --glass: rgba(11, 26, 56, 0.88);
   --glass-line: rgba(255, 255, 255, 0.14);
   --yellow: #ffd44a;
   --cyan: #5fd3ff;
@@ -268,8 +270,6 @@ button {
   border-radius: 999px;
   background: var(--glass);
   border: 1px solid var(--glass-line);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
@@ -451,8 +451,6 @@ button {
   border-radius: 20px;
   background: var(--glass);
   border: 1px solid var(--glass-line);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   animation: rise 0.35s cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
 .caption-head {
@@ -542,8 +540,6 @@ button {
   border-radius: 22px;
   background: var(--glass);
   border: 1px solid var(--glass-line);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   overflow: hidden;
 }
 .chat-top {

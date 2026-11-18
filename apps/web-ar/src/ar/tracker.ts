@@ -43,7 +43,7 @@ export const TRACKING = {
   priorFovDeg: 65,
 } as const;
 
-const RATIO_STEPS = [2, 1.5, 1.25, 1];
+const RATIO_STEPS = [2, 1.6, 1.3, 1];
 const LAT_CANDIDATES = [0, 20, 40, 60, 80, 100, 120, 140, 160];
 
 export interface ArStartOptions {
@@ -100,6 +100,10 @@ export class ArView {
   private frameMs = 16;
   private slowFor = 0;
   private ratioStep = 0;
+  private slowFrames = 0;
+  private totalFrames = 0;
+  private cameraFps = 0;
+  private lastVideoFrameAt = 0;
   private readonly ndc = new THREE.Vector2();
   private readonly qwc = new THREE.Quaternion();
   private readonly tp = new THREE.Vector3();
@@ -138,7 +142,8 @@ export class ArView {
       track: s ? `${s.hz.toFixed(0)}Hz pts ${s.inliers}/${s.points} rms ${s.rms.toFixed(1)}px` : '-',
       engine: s ? `${this.bridge!.mode} ${s.ms.toFixed(0)}ms/frame, detect ${s.detects} miss ${s.misses}` : '-',
       innov: `${this.filter.lastAngleDeg.toFixed(2)}° ${(this.filter.lastShift * 100).toFixed(2)}%`,
-      fps: `${(1000 / this.frameMs).toFixed(0)} @x${RATIO_STEPS[this.ratioStep]}`,
+      fps: `${(1000 / this.frameMs).toFixed(0)} @x${RATIO_STEPS[this.ratioStep]} slow ${this.slowFrames}/${this.totalFrames}`,
+      camera: this.cameraFps ? `${this.cameraFps.toFixed(0)}fps` : '-',
     };
     if (this.world) d.world = `n ${this.world.count} keys ${this.world.keyframes} width ${(this.world.estimate.width * 100).toFixed(1)}cm ${this.world.converged ? 'converged' : 'converging'} resets ${this.world.resets}`;
     return d;
@@ -173,7 +178,8 @@ export class ArView {
       try {
         this.stream = await navigator.mediaDevices.getUserMedia({
           audio: false,
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          // 초당 60프레임을 요청한다(지원하지 않으면 기기가 가능한 값으로 준다). 카메라 영상 자체가 부드러워진다.
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } },
         });
       } catch (e) {
         const name = (e as DOMException).name;
@@ -213,7 +219,9 @@ export class ArView {
       if (!opts.noCalibration) this.calibrator = new FocalCalibrator(prior.cx, prior.cy, prior.fx);
     }
 
-    this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: this.stage.quality === 'high', powerPreference: 'high-performance', preserveDrawingBuffer: import.meta.env.DEV });
+    // 화소 밀도가 높은 화면(대부분의 폰)에서는 MSAA 를 끈다: 비용은 크고 차이는 거의 안 보인다.
+    const msaa = this.stage.quality === 'high' && (window.devicePixelRatio || 1) < 2;
+    this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: msaa, powerPreference: 'high-performance', preserveDrawingBuffer: import.meta.env.DEV });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.domElement.className = 'ar-canvas';
     this.container.appendChild(this.renderer.domElement);
@@ -238,7 +246,9 @@ export class ArView {
         const b = this.bridge;
         const inWorker = b?.mode === 'worker';
         // 한 프레임 처리에 걸리는 시간보다 촘촘히 먹이지 않는다 (느린 기기에서 밀리지 않게).
-        const floor = b ? b.stats.ms * 1.4 : 0;
+        // 화면이 밀리고 있으면 추적을 덜 돌린다: 추적 스레드도 같은 GPU 를 쓰기 때문이다.
+        const load = this.frameMs > 30 ? 2.2 : this.frameMs > 21 ? 1.5 : 1;
+        const floor = (b ? b.stats.ms * 1.4 : 0) * load;
         // 세계 고정: 크기·거리까지 수렴하기 전에는 촘촘히 관측해 바로잡는다. 수렴한 뒤에만 느슨하게.
         if (this.world) return Math.max(floor, this.world.converged ? 120 : 40);
         // 검출은 무겁다. 워커에서는 화면을 막지 않으니 조금 더 자주 해도 된다.
@@ -246,8 +256,8 @@ export class ArView {
         const gyro = this.useGyro && this.orientation.available;
         // 빠르게 움직이는 중이거나 방금 다시 잡았으면 촘촘히, 가만히 있으면 느슨하게.
         const busy = (gyro && this.orientation.rateDegPerSec > 10) || performance.now() - this.lastLostAt < 1500 || this.filter.lastShift > 0.006;
-        if (inWorker) return Math.max(floor, 25); // 워커는 화면을 막지 않으므로 여유가 되는 만큼 촘촘히 돈다
-        return Math.max(floor, busy || !gyro ? 40 : 66);
+        if (inWorker) return Math.max(floor, (busy || !gyro ? 28 : 45) * load);
+        return Math.max(floor, (busy || !gyro ? 40 : 66) * load);
       },
       predict: (tag, outP, outQ) => this.predictAt(tag, outP, outQ),
       // 방금까지 보고 있었다면 무거운 검출 없이 예측 자세에서 바로 다시 잡는다.
@@ -293,6 +303,8 @@ export class ArView {
   /** 영상의 새 프레임이 화면에 올라올 때마다 불린다. */
   private readonly onVideoFrame = (now: number, meta: { captureTime?: number }) => {
     if (!this.running) return;
+    if (this.lastVideoFrameAt) this.cameraFps += (1000 / Math.max(1, now - this.lastVideoFrameAt) - this.cameraFps) * 0.1;
+    this.lastVideoFrameAt = now;
     const cap = meta.captureTime;
     // 촬영 시각이 말이 되는 범위(0~300ms 전)일 때만 믿는다.
     if (typeof cap === 'number' && Number.isFinite(cap) && now - cap > 0 && now - cap < 300) {
@@ -456,12 +468,14 @@ export class ArView {
     this.stage.update(dt, this.camera, this.renderer.domElement.height);
     this.renderer.render(this.scene, this.camera);
 
-    // 프레임이 밀리면 그리는 해상도를 한 단계씩 낮춘다 (2 → 1.5 → 1.25 → 1).
+    // 프레임이 밀리면 그리는 해상도를 한 단계씩 낮춘다.
     this.frameMs += (dt * 1000 - this.frameMs) * 0.05;
+    this.totalFrames++;
+    if (dt * 1000 > 25) this.slowFrames++;
     // 시작 직후의 셰이더 컴파일·등장 연출 때문에 생기는 일시적인 끊김은 세지 않는다.
     const settled = this.state === 'tracking' && performance.now() - this.trackingSince > 6000;
-    this.slowFor = settled && this.frameMs > 24 ? this.slowFor + dt : 0;
-    if (this.slowFor > 2.5 && this.ratioStep < RATIO_STEPS.length - 1) {
+    this.slowFor = settled && this.frameMs > 21 ? this.slowFor + dt : 0;
+    if (this.slowFor > 1.5 && this.ratioStep < RATIO_STEPS.length - 1) {
       this.ratioStep++;
       this.slowFor = 0;
       this.layout();

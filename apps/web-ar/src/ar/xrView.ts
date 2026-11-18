@@ -91,6 +91,14 @@ export class XrArView {
   private lastPoseAt = 0;
   private measCount = 0;
   private fps = 0;
+  private pbo: WebGLBuffer | null = null;
+  private pendingRead: { sync: WebGLSync; tag: FrameTag; waiter: (src: FrameSource | null) => void; frames: number } | null = null;
+  private readLag = 0;
+  private viewportScale = 0.85;
+  private slowFor = 0;
+  private fastFor = 0;
+  private slowFrames = 0;
+  private totalFrames = 0;
   private camSpeed = 0;
   private lastSafetyAt = 0;
   private readonly prevCam = new THREE.Vector3();
@@ -123,7 +131,8 @@ export class XrArView {
       meas: this.measCount,
       world: `n ${this.world.count} keys ${this.world.keyframes} ${this.world.converged ? 'converged' : 'converging'} resets ${this.world.resets}`,
       width: `${(e.width * 100).toFixed(1)}cm`,
-      fps: this.fps.toFixed(0),
+      fps: `${this.fps.toFixed(0)} @x${this.viewportScale.toFixed(2)} slow ${this.slowFrames}/${this.totalFrames}`,
+      read: `async, ${this.readLag.toFixed(1)} frames`,
     };
   }
 
@@ -145,11 +154,12 @@ export class XrArView {
     });
     const session = this.session;
 
-    this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
+    // MSAA 는 끈다: 폰의 높은 화소 밀도에서는 차이가 거의 안 보이는데 채우는 비용은 크다.
+    this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false, powerPreference: 'high-performance' });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.xr.enabled = true;
-    // 기기 기본 해상도의 80% 로 그린다: 큰 반투명 면이 많아 채우는 비용이 크다. 글자 선명도는 거의 그대로다.
-    this.renderer.xr.setFramebufferScaleFactor(0.8);
+    // 기본 해상도로 버퍼를 잡고, 실제로 그리는 영역은 부하에 따라 매 프레임 조절한다(아래 viewportScale).
+    this.renderer.xr.setFramebufferScaleFactor(1);
     this.renderer.xr.setReferenceSpaceType('local');
     await this.renderer.xr.setSession(session);
     this.gl = this.renderer.getContext() as WebGL2RenderingContext;
@@ -193,6 +203,12 @@ export class XrArView {
     const root = this.stage.root;
 
     if (view) {
+      // 그리는 해상도를 부하에 맞춘다. 브라우저가 권장값을 주면 그것도 반영한다.
+      // (요청은 다음 프레임부터 적용된다. 버퍼를 다시 만들지 않으므로 끊김이 없다.)
+      if (typeof view.requestViewportScale === 'function') {
+        const rec = typeof view.recommendedViewportScale === 'number' ? view.recommendedViewportScale : 1;
+        view.requestViewportScale(Math.max(0.5, Math.min(this.viewportScale, rec)));
+      }
       this.lastPoseAt = now;
       this.prevCam.copy(this.camPos);
       this.m4.fromArray(view.transform.matrix).decompose(this.camPos, this.camQuat, this.camScale);
@@ -228,13 +244,25 @@ export class XrArView {
     if (view?.camera) {
       try {
         if (!this.bridge && !this.bridgeStarting) this.bootstrap(view);
-        else if (this.frameWaiter) {
-          const waiter = this.frameWaiter;
-          this.frameWaiter = null;
-          waiter(this.grab(view, now));
-        }
+        else if (this.pendingRead) this.finishRead(now);
+        else if (this.frameWaiter) this.beginRead(view, now);
       } catch (e) {
         console.warn('camera image grab failed', e);
+      }
+    }
+
+    // 프레임이 밀리면 그리는 영역을 줄이고, 여유가 생기면 천천히 되돌린다.
+    this.totalFrames++;
+    if (dt * 1000 > 25) this.slowFrames++;
+    if (this.state === 'tracking' && now - this.startedAt > 8000) {
+      this.slowFor = this.fps < 50 ? this.slowFor + dt : 0;
+      this.fastFor = this.fps > 57 ? this.fastFor + dt : 0;
+      if (this.slowFor > 1.2 && this.viewportScale > 0.55) {
+        this.viewportScale = Math.max(0.55, this.viewportScale - 0.1);
+        this.slowFor = 0;
+      } else if (this.fastFor > 8 && this.viewportScale < 1) {
+        this.viewportScale = Math.min(1, this.viewportScale + 0.05);
+        this.fastFor = 0;
       }
     }
 
@@ -270,18 +298,20 @@ export class XrArView {
     void this.startBridge();
   }
 
-  /** 카메라 영상 텍스처를 작은 버퍼로 복사해 픽셀로 읽는다. */
-  private grab(view: Any, now: number): FrameSource | null {
+  /**
+   * 카메라 영상 읽기 1단계: 텍스처를 작은 버퍼로 복사하고, GPU 에 "픽셀을 PBO 로 옮겨 달라"고만 해 둔다.
+   * gl.readPixels 를 곧바로 배열로 받으면 GPU 가 끝날 때까지 화면 스레드가 멈춘다(프레임이 끊긴다).
+   * PBO 로 받으면 기다리지 않고 다음 프레임들에서 준비됐는지만 확인하면 된다.
+   */
+  private beginRead(view: Any, now: number): void {
     const gl = this.gl;
     const tex: WebGLTexture | null = this.binding.getCameraImage(view.camera);
-    if (!tex) return null;
+    if (!tex) return;
+    const waiter = this.frameWaiter;
+    if (!waiter) return;
+    this.frameWaiter = null;
     const w = this.w;
     const h = this.h;
-    const size = w * h * 4;
-    // 워커가 돌려준 버퍼가 있으면 다시 쓴다.
-    let pixels = this.bridge?.spare ?? null;
-    if (this.bridge) this.bridge.spare = null;
-    if (!pixels || pixels.byteLength !== size) pixels = new Uint8Array(size);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
     gl.viewport(0, 0, w, h);
@@ -297,7 +327,11 @@ export class XrArView {
     gl.uniform1i(gl.getUniformLocation(this.prog!, 'uTex'), 0);
     gl.uniform1f(gl.getUniformLocation(this.prog!, 'uFlip'), this.flip ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); // 반드시 풀어 둔다: 묶인 채로 두면 three.js 의 텍스처 업로드가 깨진다
+    const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    gl.flush();
     gl.bindVertexArray(null);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -310,7 +344,37 @@ export class XrArView {
       this.bridge?.setIntrinsics(K);
     }
     const tag: FrameTag = { time: now, camPos: this.camPos.clone(), camQuat: this.camQuat.clone() };
-    return { pixels, tag };
+    if (!sync) {
+      waiter(null);
+      return;
+    }
+    this.pendingRead = { sync, tag, waiter, frames: 0 };
+  }
+
+  /** 카메라 영상 읽기 2단계: GPU 가 다 옮겼으면 PBO 에서 꺼내 추적기에 넘긴다. */
+  private finishRead(_now: number): void {
+    const gl = this.gl;
+    const pr = this.pendingRead!;
+    pr.frames++;
+    const status = gl.clientWaitSync(pr.sync, 0, 0);
+    const ready = status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED;
+    if (!ready && status !== gl.WAIT_FAILED && pr.frames < 8) return; // 아직이면 다음 프레임에 다시 본다
+    this.pendingRead = null;
+    gl.deleteSync(pr.sync);
+    if (status === gl.WAIT_FAILED) {
+      pr.waiter(null);
+      return;
+    }
+    const size = this.w * this.h * 4;
+    // 워커가 돌려준 버퍼가 있으면 다시 쓴다.
+    let pixels = this.bridge?.spare ?? null;
+    if (this.bridge) this.bridge.spare = null;
+    if (!pixels || pixels.byteLength !== size) pixels = new Uint8Array(size);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, pixels);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    this.readLag += (pr.frames - this.readLag) * 0.2;
+    pr.waiter({ pixels, tag: pr.tag });
   }
 
   private setupCopy(camW: number, camH: number): void {
@@ -352,6 +416,10 @@ export class XrArView {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fboTex, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindTexture(gl.TEXTURE_2D, null);
+    this.pbo = gl.createBuffer();
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, this.w * this.h * 4, gl.STREAM_READ);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     this.renderer.resetState();
   }
 
@@ -389,7 +457,8 @@ export class XrArView {
       },
       // 크기·거리까지 수렴하기 전, 또는 폰이 움직이는 중에는 촘촘히 관측해 바로잡는다(초당 20번).
       // 수렴했고 가만히 있을 때만 느슨하게(초당 7번).
-      intervalMs: () => (this.world.converged && this.camSpeed < 0.08 ? 150 : 50),
+      // 화면이 밀리고 있으면 한 단계 더 느슨하게 한다(추적 스레드도 같은 GPU 를 쓴다).
+      intervalMs: () => (this.world.converged && this.camSpeed < 0.08 ? 150 : 50) * (this.fps > 0 && this.fps < 48 ? 1.6 : 1),
       predict: (tag, outP, outQ) => {
         if (!this.world.locked || !tag.camPos || !tag.camQuat) return false;
         const e = this.world.estimate;
