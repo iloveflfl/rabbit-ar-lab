@@ -111,6 +111,9 @@ interface Session {
 }
 let session: Session | null = null;
 
+/** 배포본 구분용 (진단 상자에 표시) */
+const BUILD = '1119d';
+
 function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: { label: string; title: string; onClick: () => void }) {
   const debugBox = params.get('debug') ? h('pre', { class: 'debug-box' }) : null;
   cancelAnimationFrame(landingRaf);
@@ -251,7 +254,38 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: {
     () => clearInterval(typeTimer),
     () => vv?.removeEventListener('resize', onViewport),
   ];
-  return { stage, view, bottom, root, setStatus, cleanup, debugBox };
+  // 진단(?debug=1): 입력 중 무엇이 흔들리는지 센다. 입력창이 깜빡일 때 어떤 숫자가 올라가는지로 원인을 가린다.
+  const d = { focus: 0, blur: 0, vvR: 0, vvS: 0, winR: 0, mut: 0, fs: 0, vis: 0 };
+  if (debugBox) {
+    root.addEventListener('focusin', () => d.focus++);
+    root.addEventListener('focusout', () => d.blur++);
+    const onR = () => d.vvR++;
+    const onS = () => d.vvS++;
+    const onW = () => d.winR++;
+    const onF = () => d.fs++;
+    const onV = () => d.vis++;
+    vv?.addEventListener('resize', onR);
+    vv?.addEventListener('scroll', onS);
+    window.addEventListener('resize', onW);
+    document.addEventListener('fullscreenchange', onF);
+    document.addEventListener('visibilitychange', onV);
+    const mo = new MutationObserver((list) => (d.mut += list.length));
+    mo.observe(bottom, { attributes: true, childList: true, subtree: true });
+    mo.observe(root, { attributes: true });
+    cleanup.push(
+      () => vv?.removeEventListener('resize', onR),
+      () => vv?.removeEventListener('scroll', onS),
+      () => window.removeEventListener('resize', onW),
+      () => document.removeEventListener('fullscreenchange', onF),
+      () => document.removeEventListener('visibilitychange', onV),
+      () => mo.disconnect(),
+    );
+  }
+  const uiDebug = (): Record<string, string> => ({
+    ui: `build ${BUILD} typing ${typing ? 1 : 0} focus ${d.focus}/${d.blur} mut ${d.mut}`,
+    kb: `vv ${vv ? Math.round(vv.height) : '-'}+${vv ? Math.round(vv.offsetTop) : '-'} inner ${window.innerHeight} r ${d.vvR} s ${d.vvS} win ${d.winR} fs ${d.fs} vis ${d.vis}`,
+  });
+  return { stage, view, bottom, root, setStatus, cleanup, debugBox, uiDebug };
 }
 
 function leave(): void {
@@ -314,7 +348,7 @@ async function startAr(kind: ArKind): Promise<void> {
         void startVideoAr(kind, motion);
       },
     });
-    const stopDebug = runDebug(ui.debugBox, () => xr.debug);
+    const stopDebug = runDebug(ui.debugBox, () => ({ ...xr.debug, ...ui.uiDebug() }));
     session = {
       stage: ui.stage,
       stop: () => {
@@ -359,7 +393,7 @@ async function startVideoAr(kind: ArKind, motion: Promise<boolean>): Promise<voi
     onState: (s) => ui.setStatus(s),
     onTap: (p) => p && ui.stage.selectPanel(p),
   });
-  const stopDebug = runDebug(ui.debugBox, () => ar.debug);
+  const stopDebug = runDebug(ui.debugBox, () => ({ ...ar.debug, ...ui.uiDebug() }));
   session = {
     stage: ui.stage,
     stop: () => {

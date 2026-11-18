@@ -767,3 +767,7 @@ html.xr-active body {
 #xp.typing .chat-log {
   max-height: 24vh !important;
 }
+
+#xp.typing .debug-box {
+  top: calc(200px + var(--safe-t));
+}
