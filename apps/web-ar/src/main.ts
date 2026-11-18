@@ -112,7 +112,7 @@ interface Session {
 let session: Session | null = null;
 
 /** 배포본 구분용 (진단 상자에 표시) */
-const BUILD = '1119d';
+const BUILD = '1119e';
 
 function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: { label: string; title: string; onClick: () => void }) {
   const debugBox = params.get('debug') ? h('pre', { class: 'debug-box' }) : null;
@@ -241,6 +241,18 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: {
   };
   vv?.addEventListener('resize', onViewport);
   view.addEventListener('pointerdown', () => typing && panel.blurInput());
+  // 전체화면(AR)에서는 키보드가 뜨거나 추천 줄 높이가 바뀔 때마다 브라우저가 화면 크기를 다시 잡아서
+  // 입력창이 깜빡였다. 키보드가 화면 크기를 건드리지 않고 그냥 위에 덮이게 한다(입력창은 위쪽에 고정돼 있어 가려지지 않는다).
+  const vk = (navigator as Navigator & { virtualKeyboard?: EventTarget & { overlaysContent: boolean; boundingRect: DOMRect } }).virtualKeyboard;
+  const onVk = () => {
+    if (!typing || !vk) return;
+    if (vk.boundingRect.height > 0) kbSeen = true;
+    else if (kbSeen) panel.blurInput();
+  };
+  if (vk) {
+    vk.overlaysContent = true;
+    vk.addEventListener('geometrychange', onVk);
+  }
 
   const setStatus = (s: TrackState | 'viewer') => {
     statusPill.dataset.s = s;
@@ -253,6 +265,7 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: {
   const cleanup: Array<() => void> = [
     () => clearInterval(typeTimer),
     () => vv?.removeEventListener('resize', onViewport),
+    () => vk?.removeEventListener('geometrychange', onVk),
   ];
   // 진단(?debug=1): 입력 중 무엇이 흔들리는지 센다. 입력창이 깜빡일 때 어떤 숫자가 올라가는지로 원인을 가린다.
   const d = { focus: 0, blur: 0, vvR: 0, vvS: 0, winR: 0, mut: 0, fs: 0, vis: 0 };
@@ -283,6 +296,7 @@ function buildExperience(mode: 'ar' | 'viewer', simulated: boolean, switcher?: {
   }
   const uiDebug = (): Record<string, string> => ({
     ui: `build ${BUILD} typing ${typing ? 1 : 0} focus ${d.focus}/${d.blur} mut ${d.mut}`,
+    vk: vk ? `overlay ${vk.overlaysContent ? 1 : 0} h ${Math.round(vk.boundingRect.height)}` : 'none',
     kb: `vv ${vv ? Math.round(vv.height) : '-'}+${vv ? Math.round(vv.offsetTop) : '-'} inner ${window.innerHeight} r ${d.vvR} s ${d.vvS} win ${d.winR} fs ${d.fs} vis ${d.vis}`,
   });
   return { stage, view, bottom, root, setStatus, cleanup, debugBox, uiDebug };
