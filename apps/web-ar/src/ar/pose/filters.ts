@@ -244,7 +244,7 @@ export class WorldPosterEstimator {
   private has = false;
   count = 0;
 
-  constructor(private readonly priorWidth = 0.594, private readonly priorWeight = 1) {}
+  constructor(private readonly priorWidth = 0.594, private readonly priorWeight = 0.3) {}
 
   reset(): void {
     this.recent = [];
@@ -256,6 +256,15 @@ export class WorldPosterEstimator {
   get locked(): boolean {
     return this.count >= 10;
   }
+  /**
+   * 추정을 믿어도 되는가: 관측이 충분하고, 카메라가 충분히 움직여서(시차) 실제 크기·거리까지 정해졌는가.
+   * 이게 참이 되기 전에는 추정이 "지금 보는 방향에서만" 맞을 수 있으므로, 계속 촘촘히 관측해서 바로잡아야 한다.
+   */
+  get converged(): boolean {
+    return this.count >= 40 && this.scaleInfo >= 0.5;
+  }
+  /** 크기(거리)를 정하는 데 쓸 수 있는 시차 정보량 */
+  scaleInfo = 0;
   get keyframes(): number {
     return this.keys.length;
   }
@@ -270,13 +279,18 @@ export class WorldPosterEstimator {
       w: weight,
     };
     // 이미 수렴했다면 터무니없는 관측(잘못된 정합)은 버린다.
+    // 위치 검사는 크기까지 수렴한 뒤에만 한다: 그 전에는 추정 쪽이 틀렸을 수 있다.
     if (this.locked) {
       const ang = this.est.quaternion.angleTo(s.q) * DEG;
       const pos = s.c.clone().addScaledVector(s.d, this.est.width);
-      if (ang > 12 || pos.distanceTo(this.est.position) > 0.35 * this.est.width + 0.05) {
+      const far = this.converged && pos.distanceTo(this.est.position) > 0.35 * this.est.width + 0.05;
+      if (ang > 12 || far) {
         this.rejected++;
-        // 계속 어긋나면 세계가 다시 잡힌 것(재위치)이므로 처음부터 다시 모은다.
-        if (this.rejected > 25) this.reset();
+        // 연달아 어긋나면 추정이 틀린 것(세계 좌표가 다시 잡혔거나 처음부터 잘못 굳음) → 버리고 다시 모은다.
+        if (this.rejected > 8) {
+          this.reset();
+          this.resets++;
+        }
         return;
       }
     }
@@ -302,6 +316,9 @@ export class WorldPosterEstimator {
   }
 
   private rejected = 0;
+  private resolving = false;
+  /** 추정을 버리고 다시 시작한 횟수 (진단용) */
+  resets = 0;
 
   private solve(): void {
     const all = this.keys.concat(this.recent.filter((r) => !this.keys.includes(r)));
@@ -368,6 +385,60 @@ export class WorldPosterEstimator {
     this.est.position.copy(P);
     this.est.width = sW;
 
+    // 시차 정보량: 카메라→포스터 벡터가 얼마나 다양한 방향에서 모였는가.
+    let mx = 0;
+    let my = 0;
+    let mz = 0;
+    for (const s of all) {
+      mx += s.d.x;
+      my += s.d.y;
+      mz += s.d.z;
+    }
+    mx /= all.length;
+    my /= all.length;
+    mz /= all.length;
+    let info = 0;
+    for (const s of all) info += (s.d.x - mx) ** 2 + (s.d.y - my) ** 2 + (s.d.z - mz) ** 2;
+    this.scaleInfo = info;
+
+    // 최근 관측이 지금의 해와 맞지 않으면 오래된 키프레임이 낡은 것이다(세계 좌표가 흘렀거나 다시 잡힘).
+    // 낡은 것을 버리고 최근 관측만으로 다시 푼다.
+    if (!this.resolving && this.recent.length >= 8) {
+      const tail = this.recent.slice(-8);
+      const res = tail.map((s) => Math.hypot(P.x - sW * s.d.x - s.c.x, P.y - sW * s.d.y - s.c.y, P.z - sW * s.d.z - s.c.z)).sort((a, b) => a - b);
+      if (res[4] > 0.025 + 0.04 * sW && this.keys.some((k) => !this.recent.includes(k))) {
+        this.keys = this.keys.filter((k) => this.recent.includes(k));
+        this.resolving = true;
+        this.solve();
+        this.resolving = false;
+        return;
+      }
+    }
+
+    // 아직 수렴하지 않았다면(크기·거리가 덜 정해짐) 전체 평균 대신 "가장 최근 관측"에 맞춘다.
+    // 최근 관측은 어떤 크기를 가정하든 지금 화면에서는 정확히 맞으므로, 움직이는 동안에도 포스터를 덮은 채로 따라간다.
+    // 시차가 쌓여 수렴하면 그때부터 전체 평균(고정)으로 넘어간다.
+    if (!this.converged) {
+      const tail = this.recent.slice(-5);
+      const refQ = tail[tail.length - 1].q;
+      let qx = 0;
+      let qy = 0;
+      let qz = 0;
+      let qw = 0;
+      P.set(0, 0, 0);
+      for (const s of tail) {
+        P.add(s.c).addScaledVector(s.d, sW);
+        const sign = refQ.dot(s.q) < 0 ? -1 : 1;
+        qx += s.q.x * sign;
+        qy += s.q.y * sign;
+        qz += s.q.z * sign;
+        qw += s.q.w * sign;
+      }
+      this.est.position.copy(P.multiplyScalar(1 / tail.length));
+      const ql = Math.hypot(qx, qy, qz, qw);
+      if (ql > 1e-9) this.est.quaternion.set(qx / ql, qy / ql, qz / ql, qw / ql);
+    }
+
     // 추정이 조금씩 고쳐질 때 화면에서 툭툭 튀지 않도록 출력만 부드럽게 따라가게 한다.
     if (!this.has) {
       this.out.position.copy(this.est.position);
@@ -380,7 +451,8 @@ export class WorldPosterEstimator {
   /** 매 프레임 호출: 출력 자세를 추정값 쪽으로 조금씩 옮긴다. dt 는 초. */
   pose(dt: number): WorldPose | null {
     if (!this.has) return null;
-    const k = 1 - Math.exp(-(this.locked ? 6 : 14) * dt);
+    // 수렴 전에는 최근 관측을 바짝 따라가고, 수렴한 뒤에는 천천히(고정된 느낌으로) 움직인다.
+    const k = 1 - Math.exp(-(this.converged ? 6 : 30) * dt);
     this.out.position.lerp(this.est.position, k);
     this.out.quaternion.slerp(this.est.quaternion, k);
     this.out.width += (this.est.width - this.out.width) * k;

@@ -21,7 +21,7 @@ import { POSTER } from './sceneLayout';
 import { DeviceOrientationSource, NoOrientationSource, type OrientationSource } from './sensors';
 import { SimCamera } from './simCamera';
 import { CameraError, type TrackState } from './support';
-import { TrackerClient } from './trackerClient';
+import { type FrameSource, TrackerClient } from './trackerClient';
 
 export { CameraError, type TrackState };
 
@@ -56,6 +56,8 @@ export interface ArStartOptions {
   noCalibration?: boolean;
   /** 추적을 메인 스레드에서 돌린다 (비교 시험용) */
   noWorker?: boolean;
+  /** 영상 프레임의 촬영 시각을 쓰지 않고 고정 지연값으로 센서를 맞춘다 (비교 시험용) */
+  noFrameClock?: boolean;
   latencyMs?: number;
 }
 
@@ -79,6 +81,11 @@ export class ArView {
   private running = false;
   private last = 0;
   private state: TrackState = 'starting';
+  private vfc: ((cb: (now: number, meta: { captureTime?: number }) => void) => number) | null = null;
+  private frameWaiter: ((f: FrameSource) => void) | null = null;
+  private displayCapture = 0;
+  private captureValid = false;
+  private captureLag = 0;
   private lastMeasAt = -1e9;
   private lastLostAt = -1e9;
   private trackingSince = 0;
@@ -126,13 +133,14 @@ export class ArView {
       state: this.state,
       video: `${this.vw}x${this.vh}`,
       fov: `${fov.toFixed(1)}° (${this.calibratedCount ? 'calibrated' : 'prior'})`,
-      gyro: this.useGyro && this.orientation.available ? `on ${this.orientation.rateDegPerSec.toFixed(0)}°/s lat ${this.latency.toFixed(0)}ms` : 'off',
+      gyro: this.useGyro && this.orientation.available ? `on ${this.orientation.rateDegPerSec.toFixed(0)}°/s` : 'off',
+      sync: this.captureValid ? `frame clock (${this.captureLag.toFixed(0)}ms)` : `guess ${this.latency.toFixed(0)}ms`,
       track: s ? `${s.hz.toFixed(0)}Hz pts ${s.inliers}/${s.points} rms ${s.rms.toFixed(1)}px` : '-',
       engine: s ? `${this.bridge!.mode} ${s.ms.toFixed(0)}ms/frame, detect ${s.detects} miss ${s.misses}` : '-',
       innov: `${this.filter.lastAngleDeg.toFixed(2)}° ${(this.filter.lastShift * 100).toFixed(2)}%`,
       fps: `${(1000 / this.frameMs).toFixed(0)} @x${RATIO_STEPS[this.ratioStep]}`,
     };
-    if (this.world) d.world = `n ${this.world.count} keys ${this.world.keyframes} width ${(this.world.estimate.width * 100).toFixed(1)}cm`;
+    if (this.world) d.world = `n ${this.world.count} keys ${this.world.keyframes} width ${(this.world.estimate.width * 100).toFixed(1)}cm ${this.world.converged ? 'converged' : 'converging'} resets ${this.world.resets}`;
     return d;
   }
 
@@ -224,23 +232,15 @@ export class ArView {
       intrinsics: this.K,
       targetUrl: TRACKING.targetUrl,
       useWorker: !opts.noWorker,
-      getFrame: () => {
-        const time = performance.now();
-        const tag: FrameTag = { time };
-        if (this.world && sim) {
-          tag.camPos = new THREE.Vector3();
-          tag.camQuat = new THREE.Quaternion();
-          sim.poseAt(time - this.latency, tag.camPos, tag.camQuat);
-        }
-        return { element: this.video, tag };
-      },
+      getFrame: () => this.nextFrame(),
       // 영상 추적은 센서/세계 추적을 "바로잡는" 역할이므로 상태에 따라 주기를 낮춘다.
       intervalMs: () => {
         const b = this.bridge;
         const inWorker = b?.mode === 'worker';
         // 한 프레임 처리에 걸리는 시간보다 촘촘히 먹이지 않는다 (느린 기기에서 밀리지 않게).
         const floor = b ? b.stats.ms * 1.4 : 0;
-        if (this.world) return Math.max(floor, this.world.locked ? 200 : 60);
+        // 세계 고정: 크기·거리까지 수렴하기 전에는 촘촘히 관측해 바로잡는다. 수렴한 뒤에만 느슨하게.
+        if (this.world) return Math.max(floor, this.world.converged ? 120 : 40);
         // 검출은 무겁다. 워커에서는 화면을 막지 않으니 조금 더 자주 해도 된다.
         if (this.state !== 'tracking') return Math.max(floor, inWorker ? 60 : 120);
         const gyro = this.useGyro && this.orientation.available;
@@ -264,8 +264,13 @@ export class ArView {
     window.addEventListener('resize', this.onResize);
     this.renderer.domElement.addEventListener('pointerup', this.onPointer);
 
-    this.bridge.start();
     this.running = true;
+    const v = this.video as HTMLVideoElement & { requestVideoFrameCallback?: (cb: (now: number, meta: { captureTime?: number }) => void) => number };
+    if (!opts.noFrameClock && typeof v.requestVideoFrameCallback === 'function') {
+      this.vfc = v.requestVideoFrameCallback.bind(v);
+      this.vfc(this.onVideoFrame);
+    }
+    this.bridge.start();
     this.last = performance.now();
     this.setState('searching');
     this.raf = requestAnimationFrame(this.frame);
@@ -274,6 +279,58 @@ export class ArView {
   private applyProjection(): void {
     projectionFromIntrinsics(this.K, this.vw, this.vh, this.camera.near, this.camera.far, this.camera.projectionMatrix);
     this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
+  }
+
+  /**
+   * 화면에 지금 보이는 영상 프레임이 찍힌 시각.
+   * 브라우저가 프레임별 촬영 시각을 알려 주면(requestVideoFrameCallback 의 captureTime) 그 값을 쓴다 —
+   * 지연값을 추측할 필요가 없어 센서와 정확히 맞는다. 없으면 "지금 − 추정 지연".
+   */
+  private displayTime(now: number): number {
+    return this.captureValid ? this.displayCapture : now - this.latency;
+  }
+
+  /** 영상의 새 프레임이 화면에 올라올 때마다 불린다. */
+  private readonly onVideoFrame = (now: number, meta: { captureTime?: number }) => {
+    if (!this.running) return;
+    const cap = meta.captureTime;
+    // 촬영 시각이 말이 되는 범위(0~300ms 전)일 때만 믿는다.
+    if (typeof cap === 'number' && Number.isFinite(cap) && now - cap > 0 && now - cap < 300) {
+      this.displayCapture = cap;
+      this.captureValid = true;
+      this.captureLag += (now - cap - this.captureLag) * 0.1;
+    } else this.captureValid = false;
+    const w = this.frameWaiter;
+    if (w) {
+      this.frameWaiter = null;
+      w(this.makeFrame(performance.now()));
+    }
+    this.vfc!(this.onVideoFrame);
+  };
+
+  private makeFrame(time: number): FrameSource {
+    const tag: FrameTag = { time };
+    if (this.captureValid) tag.sensorTime = this.displayCapture;
+    if (this.world && this.sim) {
+      tag.camPos = new THREE.Vector3();
+      tag.camQuat = new THREE.Quaternion();
+      this.sim.poseAt(tag.sensorTime ?? time - this.latency, tag.camPos, tag.camQuat);
+    }
+    return { element: this.video, tag };
+  }
+
+  /** 추적기에 줄 다음 프레임. 가능하면 영상의 새 프레임이 올라오는 순간에 맞춰 집는다. */
+  private nextFrame(): Promise<FrameSource> | FrameSource {
+    if (!this.vfc) return this.makeFrame(performance.now());
+    return new Promise<FrameSource>((resolve) => {
+      this.frameWaiter = resolve;
+      window.setTimeout(() => {
+        if (this.frameWaiter === resolve) {
+          this.frameWaiter = null;
+          resolve(this.makeFrame(performance.now()));
+        }
+      }, 200);
+    });
   }
 
   /** 그 프레임에서 포스터가 있을 자세를 예측한다 → 추적기가 거기서부터 찾는다. */
@@ -288,9 +345,9 @@ export class ArView {
       return true;
     }
     if (this.filter.count < 3) return false;
-    const has = this.useGyro && this.orientation.at(tag.time - this.latency, this.qwc);
+    const has = this.useGyro && this.orientation.at(tag.sensorTime ?? tag.time - this.latency, this.qwc);
     if (!has) return false; // 센서가 없으면 예측할 근거가 없다 → 직전 자세에서 찾는다
-    return this.filter.predict(this.qwc, outP, outQ, tag.time - this.latency);
+    return this.filter.predict(this.qwc, outP, outQ, tag.sensorTime ?? tag.time - this.latency);
   }
 
   private onMeasurement(m: Measurement): void {
@@ -302,10 +359,12 @@ export class ArView {
       this.world.add(m.tag.camPos, m.tag.camQuat, m.p, m.q, now);
       return;
     }
-    if (this.useGyro && this.autoLatency) this.tuneLatency(m, now);
-    const has = this.useGyro && this.orientation.at(now - this.latency, this.qwc);
+    // 프레임이 찍힌 시각을 브라우저가 알려 주면 그대로 쓰고, 아니면 지연값을 추정해서 맞춘다.
+    const st = m.tag.sensorTime ?? now - this.latency;
+    if (this.useGyro && this.autoLatency && m.tag.sensorTime === undefined) this.tuneLatency(m, now);
+    const has = this.useGyro && this.orientation.at(st, this.qwc);
     if (has && this.orientation.rateDegPerSec > TRACKING.maxRateDegPerSec) return;
-    this.filter.update(m.p, m.q, has ? this.qwc : this.ID, has, now - this.latency);
+    this.filter.update(m.p, m.q, has ? this.qwc : this.ID, has, st);
 
     // 초점거리 자동 보정: 비스듬한 시점이 충분히 모이면 다시 계산한다.
     const cal = this.calibrator;
@@ -416,7 +475,7 @@ export class ArView {
 
     if (this.world && this.sim) {
       // 세계 모드: 카메라가 세계 안에서 움직이고, 포스터는 추정한 세계 자세에 고정돼 있다.
-      this.sim.poseAt(now - this.latency, this.camera.position, this.camera.quaternion);
+      this.sim.poseAt(this.displayTime(now), this.camera.position, this.camera.quaternion);
       const pose = this.world.pose(dt);
       if (pose && this.world.locked) {
         root.position.copy(pose.position);
@@ -425,8 +484,9 @@ export class ArView {
         ok = true; // 한번 고정되면 포스터가 화면 밖으로 나가도 유지된다
       }
     } else if (this.filter.count >= 3 && (fresh || this.state === 'tracking')) {
-      const has = this.useGyro && this.orientation.at(now - this.latency, this.qwc);
-      if (this.filter.predict(has ? this.qwc : this.ID, this.tp, this.tq, now - this.latency)) {
+      const dtm = this.displayTime(now);
+      const has = this.useGyro && this.orientation.at(dtm, this.qwc);
+      if (this.filter.predict(has ? this.qwc : this.ID, this.tp, this.tq, dtm)) {
         root.position.copy(this.tp);
         root.quaternion.copy(this.tq);
         root.scale.setScalar(1);

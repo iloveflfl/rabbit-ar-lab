@@ -151,7 +151,8 @@ export class TrackerClient {
       if (this.opts.predict(src.tag, this.pp, this.pq)) {
         frame.pred = { p: [this.pp.x, this.pp.y, this.pp.z], q: [this.pq.x, this.pq.y, this.pq.z, this.pq.w] };
         // 예측만 믿고 계속 헛짚으면 가끔은 검출을 돌려 바로잡는다.
-        frame.resume = this.opts.canResume() && this.failStreak % 3 !== 2;
+        // 예측만 믿고 헛짚었으면 바로 다음에는 검출을 돌려 바로잡는다.
+        frame.resume = this.opts.canResume() && this.failStreak % 2 === 0;
       }
       this.lastSentAt = performance.now();
       const out = await this.run(src, frame);

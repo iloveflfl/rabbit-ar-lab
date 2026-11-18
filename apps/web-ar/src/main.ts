@@ -325,6 +325,7 @@ async function startVideoAr(kind: ArKind, motion: Promise<boolean>): Promise<voi
       noGyro: params.get('gyro') === '0' || (kind === 'device' && !granted),
       noCalibration: params.get('cal') === '0',
       noWorker: params.get('worker') === '0',
+      noFrameClock: params.get('vfc') === '0',
       latencyMs: params.get('lat') ? Number(params.get('lat')) : undefined,
     });
     if (DEV) exposeDebug(ui.stage, ar, null);

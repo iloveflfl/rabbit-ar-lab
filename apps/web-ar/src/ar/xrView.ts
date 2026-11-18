@@ -91,6 +91,9 @@ export class XrArView {
   private lastPoseAt = 0;
   private measCount = 0;
   private fps = 0;
+  private camSpeed = 0;
+  private lastSafetyAt = 0;
+  private readonly prevCam = new THREE.Vector3();
   private startedAt = 0;
   private gaveUp = false;
   private readonly camPos = new THREE.Vector3();
@@ -118,7 +121,7 @@ export class XrArView {
       track: s ? `${s.hz.toFixed(1)}Hz pts ${s.inliers}/${s.points} rms ${s.rms.toFixed(1)}px` : '-',
       engine: s ? `${this.bridge!.mode} ${s.ms.toFixed(0)}ms/frame, detect ${s.detects} miss ${s.misses}` : '-',
       meas: this.measCount,
-      world: `n ${this.world.count} keys ${this.world.keyframes}`,
+      world: `n ${this.world.count} keys ${this.world.keyframes} ${this.world.converged ? 'converged' : 'converging'} resets ${this.world.resets}`,
       width: `${(e.width * 100).toFixed(1)}cm`,
       fps: this.fps.toFixed(0),
     };
@@ -191,7 +194,10 @@ export class XrArView {
 
     if (view) {
       this.lastPoseAt = now;
+      this.prevCam.copy(this.camPos);
       this.m4.fromArray(view.transform.matrix).decompose(this.camPos, this.camQuat, this.camScale);
+      // 카메라가 움직이는 속도 (m/s). 움직이는 동안에는 관측을 촘촘히 한다.
+      if (dt > 0) this.camSpeed += (this.prevCam.distanceTo(this.camPos) / dt - this.camSpeed) * 0.2;
     }
 
     // 포스터는 세계에 고정: 추정한 자세에 스테이지를 놓는다.
@@ -367,8 +373,10 @@ export class XrArView {
       intrinsics: this.K!,
       targetUrl: TRACKING.targetUrl,
       getFrame: () => {
-        // 이미 고정됐고 포스터가 화면 밖이면 추적할 것이 없다 → 아무것도 하지 않는다.
-        if (this.world.locked && !this.posterInView()) return null;
+        // 추정이 수렴했고 포스터가 화면 밖이면 추적할 것이 없다. 그래도 추정이 틀렸을 가능성에 대비해
+        // 1초에 한 번은 프레임을 넘겨 확인한다.
+        if (this.world.converged && !this.posterInView() && performance.now() - this.lastSafetyAt < 1000) return null;
+        this.lastSafetyAt = performance.now();
         return new Promise<FrameSource | null>((resolve) => {
           this.frameWaiter = resolve;
           window.setTimeout(() => {
@@ -379,8 +387,9 @@ export class XrArView {
           }, 600);
         });
       },
-      // 고정되기 전에는 빨리 모으고(초당 14번), 고정된 뒤에는 천천히 바로잡기만 한다(초당 4번).
-      intervalMs: () => (this.world.locked ? 250 : 70),
+      // 크기·거리까지 수렴하기 전, 또는 폰이 움직이는 중에는 촘촘히 관측해 바로잡는다(초당 20번).
+      // 수렴했고 가만히 있을 때만 느슨하게(초당 7번).
+      intervalMs: () => (this.world.converged && this.camSpeed < 0.08 ? 150 : 50),
       predict: (tag, outP, outQ) => {
         if (!this.world.locked || !tag.camPos || !tag.camQuat) return false;
         const e = this.world.estimate;

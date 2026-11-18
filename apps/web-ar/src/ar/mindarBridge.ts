@@ -20,6 +20,8 @@ import { H, TARGETS } from './sceneLayout';
 export interface FrameTag {
   /** 이 프레임을 집어 온 시각 (performance.now, ms) */
   time: number;
+  /** 이 프레임이 실제로 찍힌 시각. 방향 센서·세계 자세를 이 시각의 값으로 맞춘다. */
+  sensorTime?: number;
   /** 세계 추적이 있을 때: 그 프레임을 찍은 카메라의 세계 자세 */
   camPos?: Vector3;
   camQuat?: Quaternion;
