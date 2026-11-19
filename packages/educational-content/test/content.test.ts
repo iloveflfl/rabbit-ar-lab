@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FACT_IDS, HIGHLIGHT_IDS, SCENE_ACTIONS, TOPIC_IDS } from '@rabbit/shared';
-import { buildPrompt, cannedEntries, containsKeyword, llmContext, matchCanned, normalizeQuestion, parseModelOutput, posterFacts, sceneScripts, scenes } from '../src';
+import { posterKo, buildPrompt, cannedEntries, containsKeyword, llmContext, matchCanned, normalizeQuestion, parseModelOutput, posterFacts, sceneScripts, scenes } from '../src';
 
 const fact = <T = any>(id: string): T => posterFacts.facts.find((f) => f.id === id) as T;
 
@@ -59,6 +59,10 @@ const unknownNumbers = (text: string) => numbersIn(text).filter((n) => !factNumb
 describe('토끼 대사와 사전제작 답변은 포스터에 있는 숫자만 쓴다', () => {
   it('장면 대사', () => {
     for (const s of sceneScripts) expect({ id: s.id, unknown: unknownNumbers(s.lines.join(' ')).filter((n) => !(s.general_numbers ?? []).includes(n)) }).toEqual({ id: s.id, unknown: [] });
+  });
+  it('한국어 번역 포스터', () => {
+    const printed = posterKo.printed_numbers;
+    for (const b of posterKo.blocks as Array<{ t?: string }>) if (b.t) expect({ t: b.t, unknown: unknownNumbers(b.t).filter((n) => !printed.includes(n)) }).toEqual({ t: b.t, unknown: [] });
   });
   it('사전제작 답변', () => {
     for (const e of cannedEntries) expect({ id: e.id, unknown: unknownNumbers(e.reply) }).toEqual({ id: e.id, unknown: [] });

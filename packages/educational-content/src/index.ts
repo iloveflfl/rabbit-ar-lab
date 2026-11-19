@@ -5,14 +5,17 @@ import scriptsJson from '../data/scene_scripts_ko.json';
 import qaJson from '../data/qa_ko.json';
 import llmJson from '../data/llm_ko.json';
 import desktopJson from '../data/desktop_prompt_ko.json';
+import posterKoJson from '../data/poster_ko.json';
 
 export const posterFacts = factsJson;
 export const scenes = scenesJson.scenes;
+/** 원본 포스터 위에 같은 자리로 넣는 한국어 번역 (tools/build_poster_ko.py 의 입력) */
+export const posterKo = posterKoJson;
 export const sceneScripts = scriptsJson.scripts as Array<{
   id: string;
   chip: string;
-  /** 0 시작 · 1 기초 지식 · 2 장비 · 3 결과 */
-  part: 0 | 1 | 2 | 3;
+  /** 0 시작 · 1 기초 지식 · 2 장비 · 3 결과 · 4 진짜 포스터 읽기 */
+  part: 0 | 1 | 2 | 3 | 4;
   highlight: HighlightId | null;
   topic: TopicId;
   lines: string[];

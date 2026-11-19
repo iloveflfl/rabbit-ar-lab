@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RABBIT_CLIPS } from '@rabbit/shared';
 import { sceneScripts, scenes } from '@rabbit/content';
-import { CHART, GUIDE, H, PAGE, POSTER, TARGETS, localToUv, targetToPoster, uvToLocal } from '../src/ar/sceneLayout';
+import { CHART, GUIDE, H, PAGE, POSTER, READ_VIEW, TARGETS, localToUv, targetToPoster, uvToLocal } from '../src/ar/sceneLayout';
 import { CLIPS, RabbitAnimator } from '../src/rabbit/clips';
 import { PART_IDS, makePose, rabbitSvg } from '../src/rabbit/rig';
 
@@ -106,5 +106,27 @@ describe('토끼 리그', () => {
     expect(a).toBe(rabbitSvg(makePose()));
     expect(a).toContain('id="earL"');
     expect(a).toContain('id="tail"');
+  });
+});
+
+describe('진짜 포스터 읽기', () => {
+  it('해설 슬라이드가 끝난 뒤 원본 → 번역 → 구역별 읽기 순서로 이어진다', () => {
+    const ids = scenes.map((x) => x.id);
+    const read = ids.slice(ids.indexOf('conclusion') + 1);
+    expect(read).toEqual(Object.keys(READ_VIEW));
+    expect(READ_VIEW[read[0]].tex).toBe('original');
+    for (const id of read.slice(1)) expect(READ_VIEW[id].tex).toBe('ko');
+    for (const id of read) expect(sceneScripts.find((x) => x.id === id)?.part).toBe(4);
+  });
+  it('짚는 구역은 포스터 안에 있고 위에서 아래로 겹치지 않게 내려간다', () => {
+    const rects = Object.values(READ_VIEW).flatMap((v) => (v.focus ? [v.focus] : []));
+    expect(rects.length).toBe(5);
+    rects.forEach((r, i) => {
+      expect(r.u0).toBeGreaterThanOrEqual(0);
+      expect(r.u1).toBeLessThanOrEqual(1);
+      expect(r.v1).toBeGreaterThan(r.v0);
+      expect(r.v1).toBeLessThanOrEqual(1);
+      if (i > 0) expect(r.v0).toBeGreaterThanOrEqual(rects[i - 1].v1 - 1e-9);
+    });
   });
 });

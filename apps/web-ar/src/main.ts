@@ -72,7 +72,7 @@ const closeHero = () => {
   hero?.dispose();
   hero = null;
 };
-const PART_LABEL = ['시작', 'PART 1 · 기초', 'PART 2 · 장비', 'PART 3 · 결과'];
+const PART_LABEL = ['시작', 'PART 1 · 기초', 'PART 2 · 장비', 'PART 3 · 결과', 'PART 4 · 진짜 포스터 읽기'];
 
 function showLanding(error?: string): void {
   closeHero();
@@ -91,7 +91,8 @@ function showLanding(error?: string): void {
 
   const arBtn = h('button', { class: 'btn btn-primary', type: 'button', onclick: () => void guarded(() => startAr('device')) }, 'AR로 보기', h('span', { class: 'arrow', text: '→' }));
   const insecure = !window.isSecureContext;
-  const sims = scenes.length - 1 - 6; // 그래프·정리 장면을 뺀 원리 시뮬레이션 수
+  const slides = sceneScripts.filter((s) => s.part < 4).length;
+  const sims = slides - 1 - 6; // 그래프·정리 장면을 뺀 원리 시뮬레이션 수
   const landing = h(
     'section',
     { id: 'landing' },
@@ -153,12 +154,13 @@ interface Session {
 let session: Session | null = null;
 
 /** 배포본 구분용 (진단 상자에 표시) */
-const BUILD = '1120a';
+const BUILD = '1120b';
 
 function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
   const debugBox = params.get('debug') ? h('pre', { class: 'debug-box' }) : null;
   closeHero();
   const stage = new LabStage(detectQuality());
+  stage.hasPaper = mode === 'ar';
   const view = h('div', { id: 'view' });
   const statusPill = h('div', { class: 'pill status', 'data-s': mode === 'viewer' ? 'viewer' : 'starting', role: 'status' });
   const toggle = h('button', { class: 'pill toggle', type: 'button', 'aria-pressed': 'false', text: '원본 포스터' });

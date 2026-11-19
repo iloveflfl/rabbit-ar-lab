@@ -131,6 +131,77 @@
       "rabbit_clip": "rabbit_cheer",
       "scene_action": "rabbit_explain",
       "beginner_prompt": "식각하면서 열이 나고, 냉각하면 온도가 내려가며, 조건마다 결과가 달라질 수 있어요."
+    },
+    {
+      "id": "original",
+      "title_ko": "이게 벽에 붙은 진짜 포스터",
+      "fact_ids": [],
+      "rabbit_clip": "rabbit_cheer",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "여기까지 따라오느라 고생했어! 이제 덮개를 걷을게. 이게 벽에 붙어 있는 진짜 포스터야."
+    },
+    {
+      "id": "read_overview",
+      "title_ko": "한국어로 바꿔서 같이 읽기",
+      "fact_ids": [],
+      "rabbit_clip": "rabbit_point",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "짠, 같은 자리에 한국어로 바꿨어. 그림과 숫자는 원본 그대로야."
+    },
+    {
+      "id": "read_motivation",
+      "title_ko": "읽기 1 · 배경과 방법",
+      "fact_ids": [
+        "semester1_si_glass_benchmark"
+      ],
+      "rabbit_clip": "rabbit_point",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "맨 위는 배경과 방법이야. 플라즈마로 깎으면 이온이 부딪히면서 기판에 열이 들어온다고 했지? 그래서 실제 시편 온도는 냉각기 설정만으로 정해지지 않아."
+    },
+    {
+      "id": "read_thermal",
+      "title_ko": "읽기 2 · 가열과 회복",
+      "fact_ids": [
+        "sic_continuous_minus50",
+        "sic_cyclic_minus50"
+      ],
+      "rabbit_clip": "rabbit_point",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "첫 번째 결과야. 왼쪽 그래프는 플라즈마를 120초 계속 켠 실험이야. 냉각기는 −50°C인데 시편은 73°C, 홀더는 98°C까지 올라갔어. 열이 빠져나가는 길에 저항이 있다는 뜻이지."
+    },
+    {
+      "id": "read_etch",
+      "title_ko": "읽기 3 · 식각률과 받침",
+      "fact_ids": [
+        "sic_etch_rate_setpoints",
+        "sic_mounting_comparison"
+      ],
+      "rabbit_clip": "rabbit_point",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "두 번째 결과는 깎이는 속도야. 왼쪽 막대를 봐. −50, −40, −20°C 순서인데 201, 75, 185로 가운데만 푹 꺼졌어. 온도 하나로는 설명이 안 돼."
+    },
+    {
+      "id": "read_metal",
+      "title_ko": "읽기 4 · 구리와 Mo",
+      "fact_ids": [
+        "cu_profile_postprocessing",
+        "mo_reference_etch"
+      ],
+      "rabbit_clip": "rabbit_point",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "세 번째는 금속이야. 구리 무늬를 식각하고, 감광막(PR)을 벗기고, 묽은 염산으로 씻은 다음 표면의 높낮이를 쟀어."
+    },
+    {
+      "id": "read_conclusion",
+      "title_ko": "읽기 5 · 결론",
+      "fact_ids": [
+        "sic_continuous_minus50",
+        "sic_cyclic_minus50",
+        "sic_etch_rate_setpoints"
+      ],
+      "rabbit_clip": "rabbit_cheer",
+      "scene_action": "rabbit_explain",
+      "beginner_prompt": "마지막 줄이 결론이야. 이제 세 문장이 다 읽히지? 첫째, 설정 온도보다 실제 온도가 훨씬 높았고, 끊어서 켜면 쉬는 동안 식는다."
     }
   ],
   "allowed_rabbit_clips": [

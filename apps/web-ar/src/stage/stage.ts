@@ -4,12 +4,15 @@
  *
  * 장면 하나 = 슬라이드 한 장. 포스터 전체를 한 장의 발표 화면으로 쓰고, 장면이 바뀌면
  * 빛줄기가 위에서 아래로 훑으며 다음 장으로 넘어간다.
+ *
+ * 해설이 끝나면 "진짜 포스터 읽기": 타일이 뒤집히며 원본 포스터가 드러나고(AR 에서는 실물 종이 그대로),
+ * 스캔 선이 내려가며 같은 자리의 글이 한국어로 바뀐 뒤, 구역을 하나씩 밝혀 가며 읽는다.
  */
 import * as THREE from 'three';
 import type { HighlightId, RabbitClip, SceneAction } from '@rabbit/shared';
 import { isHighlightId, isSceneAction } from '@rabbit/shared';
 import { sceneScripts, scenes } from '@rabbit/content';
-import { GUIDE, H, Z, uvToLocal } from '../ar/sceneLayout';
+import { GUIDE, H, POSTER_IMG, READ_VIEW, type UvRect, Z, uvToLocal } from '../ar/sceneLayout';
 import { Motion, ease } from '../motion/tween';
 import { RabbitSprite } from '../rabbit/rabbitSprite';
 import { Label } from './labels';
@@ -43,31 +46,98 @@ void main() {
 const POSTER_FRAG = /* glsl */ `
 uniform sampler2D mapA;
 uniform sampler2D mapB;
+uniform float uAlphaA;
+uniform float uAlphaB;
 uniform float uMix;
+uniform float uFx; // 0 빛줄기 넘김 · 1 타일 뒤집기 · 2 번역 스캔
 uniform float uReveal;
 uniform float uOpacity;
 uniform float uAspect; // 세로/가로
 uniform float uTime;
 uniform vec3 uAccent;
+uniform vec4 uFocus; // u0, v0, u1, v1 (v 는 위→아래)
+uniform float uFocusAmt;
+uniform float uFrame;
 varying vec2 vUv;
 
 float sdRoundBox(vec2 p, vec2 b, float r) {
   vec2 q = abs(p) - b + r;
   return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
 }
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
 
 void main() {
-  // 장 넘김: 비스듬한 빛줄기가 위에서 아래로 훑고 지나간 자리에 다음 장이 나타난다.
-  float s = (1.0 - vUv.y) + vUv.x * 0.22;
-  float edge = uMix * 1.5 - 0.14;
-  float showB = 1.0 - smoothstep(edge - 0.09, edge, s);
-  vec3 col = mix(texture2D(mapA, vUv).rgb, texture2D(mapB, vUv).rgb, showB);
+  vec2 uvA = vUv;
+  vec2 uvB = vUv;
+  float showB = 0.0;
+  float glowAmt = 0.0;
+  float hole = 0.0;
   float moving = step(0.001, uMix) * step(uMix, 0.999);
-  float beam = smoothstep(edge - 0.11, edge - 0.004, s) * (1.0 - smoothstep(edge - 0.004, edge + 0.012, s));
-  col += uAccent * beam * 0.9 * moving;
+
+  if (uFx < 0.5) {
+    // 장 넘김: 비스듬한 빛줄기가 위에서 아래로 훑고 지나간 자리에 다음 장이 나타난다.
+    float s = (1.0 - vUv.y) + vUv.x * 0.22;
+    float edge = uMix * 1.5 - 0.14;
+    showB = 1.0 - smoothstep(edge - 0.09, edge, s);
+    float beam = smoothstep(edge - 0.11, edge - 0.004, s) * (1.0 - smoothstep(edge - 0.004, edge + 0.012, s));
+    glowAmt = beam * 0.9 * moving;
+  } else if (uFx < 1.5) {
+    // 타일 뒤집기: 가운데에서 바깥으로 물결치며 타일이 한 장씩 돌아 뒷면(다음 그림)이 나온다.
+    vec2 g = vec2(10.0, floor(10.0 * uAspect + 0.5));
+    vec2 id = floor(vUv * g);
+    vec2 f = fract(vUv * g);
+    vec2 c = (id + 0.5) / g - 0.5;
+    float t0 = length(c * vec2(1.0, uAspect)) * 0.62 + hash(id) * 0.2;
+    float p = clamp((uMix * 1.16 - t0) / 0.32, 0.0, 1.0);
+    float w = abs(cos(p * 3.14159265));
+    float fx = (f.x - 0.5) / max(w, 0.002) + 0.5;
+    hole = step(0.5, abs(fx - 0.5));
+    showB = step(0.5, p);
+    vec2 uvT = (id + vec2(clamp(fx, 0.0, 1.0), f.y)) / g;
+    uvA = uvT;
+    uvB = uvT;
+    float turn = sin(p * 3.14159265);
+    float rim = smoothstep(0.42, 0.5, abs(fx - 0.5)) + smoothstep(0.44, 0.5, abs(f.y - 0.5));
+    glowAmt = turn * (0.3 + rim * 0.9) * (1.0 - hole);
+  } else {
+    // 번역 스캔: 밝은 선이 위에서 아래로 내려가고, 선이 지나는 띠에서는 글 조각들이 깜빡이며 바뀐다.
+    float s = 1.0 - vUv.y;
+    float edge = uMix * 1.3 - 0.13;
+    float k = clamp((edge - s) / 0.15, 0.0, 1.0);
+    vec2 cell = floor(vUv * vec2(40.0, 40.0 * uAspect * 2.4));
+    float n = hash(cell + floor(uTime * 16.0) * 7.3);
+    showB = step(n, k * 1.2);
+    float inBand = k * (1.0 - k) * 4.0;
+    float row = floor(vUv.y * 110.0);
+    float sh = (hash(vec2(row, floor(uTime * 22.0))) - 0.5) * 0.03 * inBand;
+    uvA.x += sh;
+    uvB.x += sh * 0.4;
+    float line = exp(-abs(s - edge) * 130.0);
+    float halo = exp(-abs(s - edge) * 16.0) * 0.22;
+    float grid = step(0.9, fract(vUv.x * 40.0)) * inBand * 0.25;
+    glowAmt = (line * 1.4 + halo + grid) * moving;
+  }
+
+  vec3 col = mix(texture2D(mapA, uvA).rgb, texture2D(mapB, uvB).rgb, showB);
+  float al = mix(uAlphaA, uAlphaB, showB) * (1.0 - hole);
+  col += uAccent * glowAmt;
+  al = max(al, min(1.0, glowAmt));
+
+  vec2 q = (vUv - 0.5) * vec2(1.0, uAspect);
+
+  // 구역 짚기: 고른 구역만 밝게 남기고 나머지는 가라앉힌다.
+  vec2 fc = vec2((uFocus.x + uFocus.z) * 0.5, 1.0 - (uFocus.y + uFocus.w) * 0.5);
+  vec2 fh = vec2(uFocus.z - uFocus.x, (uFocus.w - uFocus.y) * uAspect) * 0.5;
+  float fd = sdRoundBox((vUv - fc) * vec2(1.0, uAspect), fh, 0.014);
+  float outside = smoothstep(-0.003, 0.003, fd) * uFocusAmt;
+  float lum = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(col, mix(vec3(lum), vec3(0.02, 0.03, 0.07), 0.74), outside);
+  float fl = 1.0 - smoothstep(0.0, 0.0045, abs(fd));
+  col = mix(col, uAccent, fl * uFocusAmt);
 
   // 등장: 가운데에서 퍼지는 원형 와이프 + 빛나는 테두리
-  vec2 q = (vUv - 0.5) * vec2(1.0, uAspect);
   float r = length(q);
   float wob = sin(atan(q.y, q.x) * 6.0 + uTime * 2.0) * 0.012;
   float e2 = uReveal * 1.02 + wob * (1.0 - uReveal);
@@ -76,10 +146,14 @@ void main() {
   ring *= (1.0 - smoothstep(0.92, 1.0, uReveal));
   col = mix(col, uAccent, ring * 0.85);
 
-  // 둥근 모서리
+  // 둥근 모서리 + (실물 포스터를 그대로 보여 줄 때) 가장자리를 도는 빛 테두리
   float d = sdRoundBox(q, vec2(0.5, 0.5 * uAspect), 0.028);
   float corner = 1.0 - smoothstep(-0.003, 0.0, d);
-  float a = max(shown, ring) * uOpacity * corner;
+  float fr = (1.0 - smoothstep(0.0, 0.005, abs(d + 0.007))) * uFrame;
+  float sweep = 0.55 + 0.45 * sin(atan(q.y, q.x) * 2.0 - uTime * 1.6);
+  col = mix(col, uAccent, fr);
+  al = max(al, fr * sweep);
+  float a = max(shown * al, ring) * uOpacity * corner;
   gl_FragColor = vec4(col, a);
   #include <colorspace_fragment>
 }`;
@@ -132,8 +206,13 @@ export class LabStage {
   /** 슬라이드 두 장: 지금 보이는 장(front)과 다음에 넘길 장(back) */
   private readonly canvases = [document.createElement('canvas'), document.createElement('canvas')];
   private textures: THREE.CanvasTexture[] = [];
-  private front = 0;
+  /** 원본 포스터와 한국어 번역판 (받는 대로 채워진다) */
+  private readonly images: Partial<Record<keyof typeof POSTER_IMG, THREE.Texture>> = {};
+  /** 지금 포스터 면에 보이는 것 */
+  private shown: 'slide' | keyof typeof POSTER_IMG | null = null;
   private turning = false;
+  /** 실물 포스터가 뒤에 있는가 (AR). 그러면 '원본'은 그림을 덮지 않고 종이를 그대로 보여 준다. */
+  hasPaper = false;
   private readonly outline: THREE.LineLoop;
   private readonly props: Record<string, Prop>;
   private activeProp: Prop | null = null;
@@ -161,7 +240,13 @@ export class LabStage {
       uniforms: {
         mapA: { value: null },
         mapB: { value: null },
+        uAlphaA: { value: 1 },
+        uAlphaB: { value: 1 },
         uMix: { value: 0 },
+        uFx: { value: 0 },
+        uFocus: { value: new THREE.Vector4(0, 0, 1, 1) },
+        uFocusAmt: { value: 0 },
+        uFrame: { value: 0 },
         uReveal: { value: 0 },
         uOpacity: { value: 1 },
         uAspect: { value: H },
@@ -221,6 +306,22 @@ export class LabStage {
     });
     this.posterMat.uniforms.mapA.value = this.textures[0];
     this.posterMat.uniforms.mapB.value = this.textures[1];
+
+    // 원본·번역 포스터는 뒤에서 받아 둔다 (마지막 장들에서만 쓴다).
+    const loader = new THREE.TextureLoader();
+    for (const key of Object.keys(POSTER_IMG) as Array<keyof typeof POSTER_IMG>) {
+      loader.load(POSTER_IMG[key], (t) => {
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+        t.minFilter = THREE.LinearMipmapLinearFilter;
+        t.generateMipmaps = true;
+        renderer.initTexture(t);
+        this.images[key] = t;
+        // 받기 전에 이미 그 장에 와 있었다면 지금 보여 준다.
+        const cur = scenes[this.sceneIndex]?.id;
+        if (cur && READ_VIEW[cur]?.tex === key) this.showView(cur, this.sceneIndex, false);
+      });
+    }
   }
 
   /* ───────── 매 프레임 ───────── */
@@ -293,25 +394,17 @@ export class LabStage {
 
   /* ───────── 장면 ───────── */
 
-  /** 다음 장을 뒤쪽 캔버스에 그리고 넘긴다. */
-  private turnTo(index: number, accent: string): void {
+  /** 포스터 면을 다른 그림으로 바꾼다. fx: 0 빛줄기 · 1 타일 뒤집기 · 2 번역 스캔 */
+  private turn(tex: THREE.Texture, alpha: number, fx: 0 | 1 | 2): void {
     const u = this.posterMat.uniforms;
-    const m = this.motion;
-    if (!this.textures.length) return;
     if (this.turning) this.finishTurn();
-    (u.uAccent.value as THREE.Color).set(accent);
-    if (this.sceneIndex < 0) {
-      // 첫 장: 넘김 없이 바로
-      paintPage(this.canvases[this.front], index);
-      this.textures[this.front].needsUpdate = true;
-      return;
-    }
-    const back = 1 - this.front;
-    paintPage(this.canvases[back], index);
-    this.textures[back].needsUpdate = true;
-    this.turning = true;
+    u.mapB.value = tex;
+    u.uAlphaB.value = alpha;
+    u.uFx.value = fx;
     u.uMix.value = 0.001;
-    m.to(u.uMix, { value: 1 }, 0.85, { ease: ease.inOutCubic, onComplete: () => this.finishTurn() });
+    this.turning = true;
+    const [dur, e] = fx === 0 ? [0.85, ease.inOutCubic] : fx === 1 ? [1.5, ease.inOutSine] : [2.4, ease.inOutSine];
+    this.motion.to(u.uMix, { value: 1 }, dur, { ease: e, onComplete: () => this.finishTurn() });
   }
 
   private finishTurn(): void {
@@ -319,10 +412,70 @@ export class LabStage {
     this.turning = false;
     const u = this.posterMat.uniforms;
     this.motion.kill(u.uMix);
-    this.front = 1 - this.front;
-    u.mapA.value = this.textures[this.front];
-    u.mapB.value = this.textures[1 - this.front];
+    u.mapA.value = u.mapB.value;
+    u.uAlphaA.value = u.uAlphaB.value;
     u.uMix.value = 0;
+  }
+
+  /** 밝게 남길 구역을 옮긴다 (null 이면 전체를 밝게). */
+  private setFocus(rect: UvRect | null, delay = 0): void {
+    const u = this.posterMat.uniforms;
+    const m = this.motion;
+    const v = u.uFocus.value as THREE.Vector4;
+    m.kill(u.uFocusAmt);
+    m.kill(v);
+    if (!rect) {
+      m.to(u.uFocusAmt, { value: 0 }, 0.4);
+      return;
+    }
+    const to = { x: rect.u0, y: rect.v0, z: rect.u1, w: rect.v1 };
+    if (u.uFocusAmt.value < 0.02) v.set(to.x, to.y, to.z, to.w);
+    else m.to(v, to, 0.8, { ease: ease.inOutCubic });
+    m.to(u.uFocusAmt, { value: 1 }, 0.6, { delay });
+  }
+
+  /** 장면에 맞는 그림을 포스터 면에 올린다: 해설 슬라이드, 원본 포스터, 한국어 번역판. */
+  private showView(id: string, index: number, same: boolean): void {
+    const u = this.posterMat.uniforms;
+    const view = READ_VIEW[id];
+    (u.uAccent.value as THREE.Color).set(view?.accent ?? pageAccent(id));
+    if (!this.textures.length) return;
+    const m = this.motion;
+    m.kill(u.uFrame);
+
+    if (!view) {
+      this.setFocus(null);
+      m.to(u.uFrame, { value: 0 }, 0.3);
+      if (same && this.shown === 'slide') return;
+      if (this.turning) this.finishTurn();
+      if (this.shown === null) {
+        // 첫 장: 넘김 없이 바로
+        paintPage(this.canvases[0], index);
+        this.textures[0].needsUpdate = true;
+        u.mapA.value = this.textures[0];
+        u.uAlphaA.value = 1;
+      } else {
+        const i = u.mapA.value === this.textures[0] ? 1 : 0;
+        paintPage(this.canvases[i], index);
+        this.textures[i].needsUpdate = true;
+        this.turn(this.textures[i], 1, this.shown === 'slide' ? 0 : 1);
+      }
+      this.shown = 'slide';
+      return;
+    }
+
+    const tex = this.images[view.tex];
+    if (!tex) return; // 아직 받는 중: 받으면 init 의 콜백이 다시 부른다.
+    const alpha = view.tex === 'original' && this.hasPaper ? 0 : 1;
+    let turned = false;
+    if (this.shown !== view.tex) {
+      // 원본 → 번역은 스캔, 그 밖에는 타일 뒤집기
+      this.turn(tex, alpha, view.tex === 'ko' && this.shown === 'original' ? 2 : 1);
+      this.shown = view.tex;
+      turned = true;
+    }
+    this.setFocus(view.focus, turned ? 1.3 : 0);
+    m.to(u.uFrame, { value: alpha === 0 ? 1 : 0 }, 0.6, { delay: turned && alpha === 0 ? 1.0 : 0 });
   }
 
   goScene(id: string, opts: { silent?: boolean } = {}): void {
@@ -337,10 +490,10 @@ export class LabStage {
     }
     const scene = scenes[index];
     const script = sceneScripts[index];
-    const accent = pageAccent(id);
+    const accent = READ_VIEW[id]?.accent ?? pageAccent(id);
     const same = index === this.sceneIndex;
-    if (!same) this.turnTo(index, accent);
     this.sceneIndex = index;
+    this.showView(id, index, same);
 
     // 3D 시뮬: 이전 것은 줄여서 치우고, 새 것은 장이 넘어간 뒤에 키운다.
     const m = this.motion;
@@ -392,7 +545,7 @@ export class LabStage {
   private afterClip(ended: RabbitClip): void {
     if (this.sceneIndex < 0) return;
     const id = scenes[this.sceneIndex].id;
-    if (id !== 'intro' && id !== 'conclusion' && ended !== 'rabbit_wave') this.rabbit.animator.play('rabbit_point', GUIDE.side);
+    if (id !== 'intro' && id !== 'conclusion' && id !== 'original' && id !== 'read_conclusion' && ended !== 'rabbit_wave') this.rabbit.animator.play('rabbit_point', GUIDE.side);
   }
 
   /**
@@ -489,6 +642,16 @@ export class LabStage {
 
   /** 지금 장의 시뮬을 처음부터 다시 재생한다. */
   replay(): void {
+    // 번역 장에서는 원본 → 한국어로 바뀌는 스캔을 다시 보여 준다.
+    const id = scenes[this.sceneIndex]?.id;
+    const { original, ko } = this.images;
+    if (id === 'read_overview' && original && ko && !this.turning && this.shown === 'ko') {
+      const u = this.posterMat.uniforms;
+      u.mapA.value = original;
+      u.uAlphaA.value = this.hasPaper ? 0 : 1;
+      this.turn(ko, 1, 2);
+      return;
+    }
     if (this.activeProp) {
       this.motion.kill(this.activeProp);
       this.activeProp.play(this.motion);
@@ -504,6 +667,7 @@ export class LabStage {
     this.motion.killAll();
     this.rabbit.dispose();
     for (const t of this.textures) t.dispose();
+    for (const t of Object.values(this.images)) t.dispose();
     this.posterMat.dispose();
     this.root.traverse((o) => {
       const mesh = o as THREE.Mesh;

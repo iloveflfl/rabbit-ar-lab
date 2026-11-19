@@ -67,6 +67,27 @@ export const CHART: UvRect = subRect(PAGE.hero, 0.05, 0.1, 0.95, 0.74);
 /** 실물(원본) 포스터에서 QR 스티커가 붙는 영역: CONCLUSIONS 띠의 오른쪽 빈 곳. 타깃을 만들 때 가린다. */
 export const ORIGINAL_QR_ZONE: UvRect = { u0: 0.8, v0: 0.932, u1: 0.972, v1: 0.977 };
 
+/* ───────── 진짜 포스터 읽기 ─────────
+ * 해설 슬라이드가 끝나면 원본 포스터 → 같은 자리에 한국어로 바꾼 번역판을 보여 주고 구역별로 짚는다.
+ * focus 는 그 장에서 밝게 남기는 구역 (원본 포스터의 띠 경계에 맞췄다).
+ */
+export const POSTER_IMG = { original: 'assets/poster/original.webp', ko: 'assets/poster/ko.webp' } as const;
+export interface ReadView {
+  tex: keyof typeof POSTER_IMG;
+  focus: UvRect | null;
+  accent: string;
+}
+const band = (v0: number, v1: number): UvRect => ({ u0: 0.012, v0, u1: 0.988, v1 });
+export const READ_VIEW: Record<string, ReadView> = {
+  original: { tex: 'original', focus: null, accent: '#F5F7FB' },
+  read_overview: { tex: 'ko', focus: null, accent: '#4ADE9E' },
+  read_motivation: { tex: 'ko', focus: band(0.092, 0.311), accent: '#5CC8FF' },
+  read_thermal: { tex: 'ko', focus: band(0.313, 0.541), accent: '#FF7A59' },
+  read_etch: { tex: 'ko', focus: band(0.542, 0.741), accent: '#F5C451' },
+  read_metal: { tex: 'ko', focus: band(0.741, 0.926), accent: '#A78BFA' },
+  read_conclusion: { tex: 'ko', focus: band(0.926, 0.981), accent: '#4ADE9E' },
+};
+
 /* ───────── 깊이(z) 계층 — 포스터 단위 ───────── */
 export const Z = {
   /** 덮어쓰는 2D 포스터. 실물 종이와 z-fighting 이 나지 않을 만큼만 띄운다. */
