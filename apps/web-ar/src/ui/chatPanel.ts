@@ -52,7 +52,7 @@ export class ChatPanel {
 
   constructor(private readonly chat: ChatController, private readonly hooks: ChatPanelHooks) {
     this.log = h('div', { class: 'chat-log', role: 'log', 'aria-live': 'polite' });
-    this.input = h('input', { type: 'text', placeholder: '궁금한 것을 물어보세요', maxlength: LIMITS.maxMessageChars, enterkeyhint: 'send', autocomplete: 'off', 'aria-label': '질문 입력' });
+    this.input = h('input', { type: 'text', placeholder: '래비트에게 물어보세요', maxlength: LIMITS.maxMessageChars, enterkeyhint: 'send', autocomplete: 'off', 'aria-label': '질문 입력' });
     this.sendBtn = h('button', { class: 'send', type: 'submit', 'aria-label': '보내기', text: '↑' });
     this.link = h('div', { class: 'link' });
     this.quick = h('div', { class: 'quick' }, ...QUICK_PROMPTS.map((q) => h('button', { class: 'chip q', type: 'button', text: q, onclick: () => this.submit(q) })));
@@ -63,7 +63,7 @@ export class ChatPanel {
       e.preventDefault();
       this.submit(this.input.value);
     });
-    this.el = h('div', { class: 'chat', 'data-state': 'idle' }, h('div', { class: 'chat-top' }, h('span', { text: 'AI 가이드와의 대화' }), h('span', { class: 'grow' }), this.toggleBtn, closeBtn), this.log, this.quick, form, this.link);
+    this.el = h('div', { class: 'chat', 'data-state': 'idle' }, h('div', { class: 'chat-top' }, h('span', { text: '래비트와의 대화' }), h('span', { class: 'grow' }), this.toggleBtn, closeBtn), this.log, this.quick, form, this.link);
     // 입력 중 표시: 잠깐의 blur(보내기 버튼을 누르는 순간 등)에 화면이 출렁이지 않게 조금 늦춰서 끈다.
     let blurTimer = 0;
     this.input.addEventListener('focus', () => {

@@ -190,8 +190,8 @@
     {
       "id": "greeting",
       "topic": "general",
-      "keywords": ["안녕", "하이", "hello", "hi", "반가", "누구", "이름", "토끼"],
-      "reply": "안녕! 나는 이 포스터를 쉽게 설명해 주는 토끼 선생님이야. 플라즈마로 SiC를 깎을 때 온도가 어떻게 변하는지 궁금한 걸 뭐든 물어봐!",
+      "keywords": ["안녕", "하이", "hello", "hi", "반가", "누구", "이름", "토끼", "래비트"],
+      "reply": "안녕! 나는 이 포스터를 쉽게 설명해 주는 토끼 선생님, 래비트야. 플라즈마로 SiC를 깎을 때 온도가 어떻게 변하는지 궁금한 걸 뭐든 물어봐!",
       "animation": "rabbit_greet",
       "highlight": null,
       "sourceFactIds": []

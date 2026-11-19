@@ -98,8 +98,8 @@ export const Z = {
   chartBase: 0.012,
   /** 3D 소품이 튀어나오는 기본 깊이 (약 2 cm) */
   prop: 2 * CM,
-  /** 토끼 2D 평면 (약 11 cm 앞) */
-  rabbit: 11 * CM,
+  /** 래비트 2D 평면: 포스터보다 약 18 cm 앞으로 나와 선다 */
+  rabbit: 18 * CM,
   /** 떠다니는 입자의 최대 깊이 (약 22 cm) */
   particlesMax: 22 * CM,
 } as const;
@@ -110,14 +110,22 @@ export const RABBIT = {
   planeHeight: 0.36,
 } as const;
 
-/** 안내 토끼가 서는 자리(u, v = 발 위치)와 바라보는 방향(-1 왼쪽, 1 오른쪽), 크기 배율. 슬라이드 오른쪽 아래 모서리. */
+/**
+ * 안내 토끼 '래비트'가 서는 자리(u, v = 발 위치)와 바라보는 방향(-1 왼쪽, 1 오른쪽), 크기 배율.
+ * AR 이니 포스터 안에 갇혀 있을 이유가 없다: 포스터 오른쪽 바깥(u > 1), 앞쪽(Z.rabbit)에 크게 서서 안쪽을 가리킨다.
+ */
 export interface Station {
   u: number;
   v: number;
   side: -1 | 1;
   scale: number;
 }
-export const GUIDE: Station = { u: 0.87, v: 0.985, side: -1, scale: 0.6 };
+export const GUIDE: Station = { u: 1.06, v: 0.69, side: -1, scale: 1.25 };
+/** 장면마다 래비트가 서는 자리: 포스터를 읽을 때는 짚고 있는 구역 옆으로 옮겨 간다. */
+export function guideFor(sceneId: string): Station {
+  const focus = READ_VIEW[sceneId]?.focus;
+  return focus ? { ...GUIDE, v: Math.min(0.985, focus.v1) } : GUIDE;
+}
 
 /* ───────── 이미지 타깃 ─────────
  * 포스터 전체가 화면에 다 안 들어오는 가까운 거리에서도 추적이 이어지도록

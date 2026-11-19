@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RABBIT_CLIPS } from '@rabbit/shared';
 import { sceneScripts, scenes } from '@rabbit/content';
-import { CHART, GUIDE, H, PAGE, POSTER, READ_VIEW, TARGETS, localToUv, targetToPoster, uvToLocal } from '../src/ar/sceneLayout';
+import { CHART, GUIDE, guideFor, H, PAGE, POSTER, READ_VIEW, TARGETS, localToUv, targetToPoster, uvToLocal } from '../src/ar/sceneLayout';
 import { CLIPS, RabbitAnimator } from '../src/rabbit/clips';
 import { PART_IDS, makePose, rabbitSvg } from '../src/rabbit/rig';
 
@@ -28,13 +28,16 @@ describe('포스터 좌표계', () => {
     for (let i = 1; i < order.length; i++) expect(order[i].v0, `구역 ${i}`).toBeGreaterThanOrEqual(order[i - 1].v1);
   });
 
-  it('그래프 자리는 HERO 안에 있고, 안내 토끼는 한 줄 정리·진행 표시와 겹치지 않는 오른쪽 아래에 선다', () => {
+  it('그래프 자리는 HERO 안에 있고, 래비트는 포스터 오른쪽 바깥, 시뮬 자리 옆에 선다', () => {
     expect(CHART.u0).toBeGreaterThanOrEqual(PAGE.hero.u0);
     expect(CHART.u1).toBeLessThanOrEqual(PAGE.hero.u1);
     expect(CHART.v0).toBeGreaterThanOrEqual(PAGE.hero.v0);
     expect(CHART.v1).toBeLessThanOrEqual(PAGE.hero.v1);
-    expect(GUIDE.u).toBeGreaterThan(PAGE.key.u1);
-    expect(GUIDE.v).toBeGreaterThan(PAGE.cards.v1);
+    expect(GUIDE.u).toBeGreaterThan(1);
+    expect(GUIDE.v).toBeGreaterThan(PAGE.hero.v0);
+    expect(GUIDE.v).toBeLessThanOrEqual(PAGE.cards.v0);
+    expect(guideFor('read_thermal').v).toBeCloseTo(READ_VIEW.read_thermal.focus!.v1);
+    expect(guideFor('intro')).toEqual(GUIDE);
   });
 
   it('장면은 기초 → 장비 → 결과 순서로 이어진다', () => {

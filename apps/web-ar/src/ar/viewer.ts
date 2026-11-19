@@ -91,7 +91,8 @@ export class ViewerView {
 
   /** 강조 중인 패널(없으면 포스터 전체)이 UI 에 가리지 않는 영역에 들어오도록 카메라 목표를 잡는다. */
   private frameTarget(snap = false): void {
-    const b = { cx: 0, cy: 0, w: 1, h: H };
+    // 포스터 + 오른쪽 바깥에 서는 래비트까지 화면에 담는다.
+    const b = { cx: 0.1, cy: 0, w: 1.2, h: H };
     const full = true;
     const h = this.container.clientHeight || 1;
     const usable = Math.max(0.35, 1 - this.bottomInset / h - 0.07);

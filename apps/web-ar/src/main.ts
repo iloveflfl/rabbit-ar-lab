@@ -154,7 +154,7 @@ interface Session {
 let session: Session | null = null;
 
 /** 배포본 구분용 (진단 상자에 표시) */
-const BUILD = '1120b';
+const BUILD = '1120c';
 
 function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
   const debugBox = params.get('debug') ? h('pre', { class: 'debug-box' }) : null;

@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import type { HighlightId, RabbitClip, SceneAction } from '@rabbit/shared';
 import { isHighlightId, isSceneAction } from '@rabbit/shared';
 import { sceneScripts, scenes } from '@rabbit/content';
-import { GUIDE, H, POSTER_IMG, READ_VIEW, type UvRect, Z, uvToLocal } from '../ar/sceneLayout';
+import { GUIDE, H, guideFor, POSTER_IMG, READ_VIEW, type UvRect, Z, uvToLocal } from '../ar/sceneLayout';
 import { Motion, ease } from '../motion/tween';
 import { RabbitSprite } from '../rabbit/rabbitSprite';
 import { Label } from './labels';
@@ -515,7 +515,15 @@ export class LabStage {
 
     // 안내 토끼: 장이 바뀔 때 폴짝
     const rp = this.rabbitPos;
-    if (!same) m.run(0.5, (k) => (rp.hop = Math.sin(k * Math.PI) * 0.05), { delay: 0.2 });
+    if (!same) {
+      // 장이 바뀌면 폴짝 뛰어 그 장의 자리로 (포스터를 읽을 때는 짚는 구역 옆으로)
+      const st = guideFor(id);
+      const [sx, sy] = uvToLocal(st.u, st.v);
+      const far = Math.abs(sy - rp.y) > 0.02;
+      m.kill(rp);
+      m.to(rp, { x: sx, y: sy }, far ? 0.7 : 0.3, { delay: 0.2, ease: ease.inOutCubic });
+      m.run(far ? 0.7 : 0.5, (k) => (rp.hop = Math.sin(k * Math.PI) * (far ? 0.09 : 0.05)), { delay: 0.2 });
+    }
     const clip = clipFor(scene.rabbit_clip);
     m.kill(this.rabbit);
     m.after(0.35, () => this.rabbit.animator.play(clip, GUIDE.side), this.rabbit);
