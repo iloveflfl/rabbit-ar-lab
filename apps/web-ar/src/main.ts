@@ -11,6 +11,7 @@ import { LabStage, type Quality, type SceneEvent } from './stage/stage';
 import { ChatPanel } from './ui/chatPanel';
 import { h } from './ui/dom';
 import { LandingHero } from './ui/landingHero';
+import { openPrivacy, PRIVACY_LABEL } from './ui/privacyNotice';
 
 const DEV = import.meta.env.DEV;
 const params = new URLSearchParams(location.search);
@@ -138,7 +139,7 @@ function showLanding(error?: string): void {
         }),
       ),
     ),
-    h('footer', { class: 'land-foot' }, h('span', { text: m.corrected_ar_title }), h('span', { text: `${m.authors.join(', ').replace('*', '')} · Plasma & Device Laboratory` })),
+    h('footer', { class: 'land-foot' }, h('span', { text: m.corrected_ar_title }), h('span', { text: `${m.authors.join(', ').replace('*', '')} · Plasma & Device Laboratory` }), h('button', { class: 'land-privacy', type: 'button', text: PRIVACY_LABEL, onclick: () => openPrivacy(app) })),
   );
   if (insecure) arBtn.setAttribute('disabled', '');
   app.replaceChildren(landing);
@@ -154,7 +155,7 @@ interface Session {
 let session: Session | null = null;
 
 /** 배포본 구분용 (진단 상자에 표시) */
-const BUILD = '1120c';
+const BUILD = '1120d';
 
 function buildExperience(mode: 'ar' | 'viewer', simulated: boolean) {
   const debugBox = params.get('debug') ? h('pre', { class: 'debug-box' }) : null;

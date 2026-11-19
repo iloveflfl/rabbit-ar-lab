@@ -5,6 +5,7 @@
 import { type FactId, type HighlightId, LIMITS, type TopicId } from '@rabbit/shared';
 import type { Answer, ChatController, LinkStatus } from '../chat/chatController';
 import { h } from './dom';
+import { CHAT_NOTICE, openPrivacy } from './privacyNotice';
 
 export const QUICK_PROMPTS = ['왜 영하 50도인데 기판은 73도야?', 'ICP랑 CCP는 뭐가 달라?', '플라즈마가 뭐야?', '냉각을 왜 3분씩 했어?'];
 
@@ -89,7 +90,7 @@ export class ChatPanel {
           : s === 'connecting'
             ? 'AI에 연결하는 중…'
             : 'AI 오프라인 · 미리 준비한 답변으로 알려 드려요';
-    this.link.replaceChildren(dot, text);
+    this.link.replaceChildren(dot, h('span', { class: 'link-text', text }), h('button', { class: 'link-privacy', type: 'button', text: CHAT_NOTICE, onclick: () => openPrivacy(this.el.closest<HTMLElement>('#xp')) }));
   }
 
   private setState(s: 'idle' | 'peek' | 'open'): void {
