@@ -1032,3 +1032,10 @@ html.xr-active body {
   word-break: keep-all;
   opacity: 0.78;
 }
+.privacy-group {
+  margin: 18px 0 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+  font-weight: 700;
+}

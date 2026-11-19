@@ -5,7 +5,7 @@
  */
 import { h } from './dom';
 
-export const PRIVACY_LABEL = '개인정보 처리 안내';
+export const PRIVACY_LABEL = '이용약관 · 개인정보 처리 안내';
 /** 채팅 입력창 바로 아래에 늘 보이는 한 줄. 수집 사실은 숨기지 않고 입력하는 자리에서 알린다. */
 export const CHAT_NOTICE = '질문은 기록·공유될 수 있어요';
 
@@ -43,7 +43,7 @@ export const PRIVACY_SECTIONS: Array<{ title: string; body: string[] }> = [
   },
   {
     title: '보관',
-    body: ['질문 기록은 발표자 PC 에 보관하고, 위 목적에 더 필요하지 않게 되면 지웁니다.'],
+    body: ['질문 기록은 발표자 PC 에 보관합니다. 개인을 알아볼 수 없는 질문 기록은 운영자가 필요하다고 판단하는 동안 기간 제한 없이 보관·활용할 수 있습니다.'],
   },
   {
     title: '문의·삭제 요청',
@@ -55,7 +55,59 @@ export const PRIVACY_SECTIONS: Array<{ title: string; body: string[] }> = [
   },
 ];
 
+/**
+ * 이용약관. 운영자에게 최대한 유리하게 쓰되, 약관규제법상 무효가 되는 문구(고의·중과실 면책, 법이 준 권리의 포기 등)는
+ * 넣지 않는다. 그런 조항은 넣어도 효력이 없고 약관 전체의 신뢰만 깎는다.
+ */
+export const TERMS_SECTIONS: Array<{ title: string; body: string[] }> = [
+  {
+    title: '약관의 적용',
+    body: [
+      '이 서비스(AR 해설, 3D 보기, AI 채팅)를 이용하면 이 약관과 아래 개인정보 처리 안내에 동의한 것으로 봅니다. 동의하지 않으면 이용을 멈춰 주세요.',
+      '운영자는 포스터 발표자(Plasma & Device Laboratory)입니다. 운영자는 약관을 언제든 고칠 수 있고, 고친 약관은 이 화면에 올린 때부터 적용됩니다.',
+    ],
+  },
+  {
+    title: '서비스의 제공과 중단',
+    body: [
+      '이 서비스는 학술제 전시용으로 무료로, 있는 그대로 제공됩니다. 운영자는 예고 없이 서비스의 전부나 일부를 바꾸거나, 멈추거나, 끝낼 수 있고 이를 유지할 의무가 없습니다.',
+      '운영자는 이유를 밝히지 않고 특정 접속이나 질문을 제한·차단하거나 답변을 거절할 수 있습니다.',
+    ],
+  },
+  {
+    title: '입력한 내용에 대한 권리',
+    body: [
+      '채팅에 입력한 질문에 대해, 이용자는 운영자가 이를 기간·지역·횟수 제한 없이 무상으로 저장·복제·수정·편집·번역·인용·공개·배포하고 연구·교육·발표·홍보·서비스 개선에 쓸 수 있도록 허락합니다. 운영자는 이를 제3자에게 다시 허락할 수 있고, 이용자에게 알리거나 대가를 줄 의무가 없습니다.',
+      '이용자는 자신이 입력한 내용에 대해 책임을 지며, 다른 사람의 개인정보·비밀·저작물을 입력하지 않습니다.',
+    ],
+  },
+  {
+    title: '하면 안 되는 일',
+    body: [
+      '도배, 자동화된 대량 요청, 서버·AI 를 속이거나 망가뜨리려는 시도, 욕설·혐오·불법적인 내용 입력, 이 서비스의 무단 복제·재배포를 금지합니다. 위반으로 운영자나 제3자에게 손해가 생기면 위반한 이용자가 책임집니다.',
+    ],
+  },
+  {
+    title: '보증하지 않는 것과 책임의 한계',
+    body: [
+      'AI 의 답과 해설은 참고용이며 정확성·완전성·특정 목적에의 적합성을 보증하지 않습니다. 이를 믿고 내린 판단의 결과는 이용자가 책임집니다.',
+      '운영자는 법이 허용하는 가장 넓은 범위에서, 서비스의 이용·이용 불가·중단·오류·데이터 손실, 이용 중 기기나 주변에서 생긴 사고로 인한 손해에 대해 책임지지 않습니다. 다만 운영자의 고의 또는 중대한 과실로 생긴 손해는 그렇지 않습니다.',
+      'AR 을 볼 때는 주변 사람과 장애물을 살피고, 걸으면서 화면만 보지 마세요.',
+    ],
+  },
+  {
+    title: '저작권',
+    body: ['포스터, 해설, 그림, 3D 시뮬레이션, 캐릭터 등 이 서비스의 모든 내용에 대한 권리는 운영자와 원저작자에게 있습니다. 개인적인 관람 외의 이용에는 운영자의 허락이 필요합니다.'],
+  },
+  {
+    title: '준거법',
+    body: ['이 약관은 대한민국 법에 따릅니다. 약관의 일부가 효력이 없더라도 나머지는 그대로 적용됩니다. 법이 이용자에게 보장하는 권리는 이 약관으로 줄어들지 않습니다.'],
+  },
+];
+
 let open: HTMLElement | null = null;
+
+const section = (s: { title: string; body: string[] }) => h('section', {}, h('h3', { text: s.title }), ...s.body.map((p) => h('p', { text: p })));
 
 /** host: 안내 창을 붙일 곳. AR 중에는 화면에 보이는 것이 overlay 요소 안쪽뿐이라 그 안에 붙여야 한다. */
 export function openPrivacy(host?: HTMLElement | null): void {
@@ -77,7 +129,10 @@ export function openPrivacy(host?: HTMLElement | null): void {
     h(
       'div',
       { class: 'privacy-body' },
-      ...PRIVACY_SECTIONS.map((s) => h('section', {}, h('h3', { text: s.title }), ...s.body.map((p) => h('p', { text: p })))),
+      h('h2', { class: 'privacy-group', text: '이용약관' }),
+      ...TERMS_SECTIONS.map(section),
+      h('h2', { class: 'privacy-group', text: '개인정보 처리 안내' }),
+      ...PRIVACY_SECTIONS.map(section),
     ),
   );
   open = h('div', { class: 'privacy' }, card);
